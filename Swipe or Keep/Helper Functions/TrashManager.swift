@@ -1,18 +1,19 @@
-//
-//  TrashManager.swift
-//  Swipe or Keep
-//
-//  Created by Gbolade Ariyo on 1/7/25.
-//
-
 import SwiftUI
+import Photos
 
-struct TrashManager: View {
-    var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+
+class TrashManager: ObservableObject {
+    static let shared = TrashManager() // Singleton instance
+
+    @Published var trashedItems: [PHAsset] = []
+
+    private init() {}
+
+    func addToTrash(_ asset: PHAsset) {
+        trashedItems.append(asset)
     }
-}
 
-#Preview {
-    TrashManager()
+    func removeFromTrash(_ asset: PHAsset) {
+        trashedItems.removeAll { $0.localIdentifier == asset.localIdentifier }
+    }
 }

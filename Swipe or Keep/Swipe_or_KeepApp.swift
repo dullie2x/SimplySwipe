@@ -9,9 +9,15 @@ import SwiftUI
 
 @main
 struct Swipe_or_KeepApp: App {
+    init() {
+        // Force dark mode throughout the app
+        UIView.appearance().overrideUserInterfaceStyle = .dark
+    }
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            SplashView()
         }
     }
 }
+

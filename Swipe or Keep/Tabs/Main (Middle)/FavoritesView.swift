@@ -4,9 +4,12 @@ import Photos
 struct FavoritesView: View {
     @State private var isLoading = true
     @State private var favoriteAssets: [PHAsset] = []
+    @Environment(\.presentationMode) var presentationMode // To handle navigation
 
     var body: some View {
-        NavigationView {
+        VStack(spacing: 10) { // Reduced spacing between back button and content
+            // Custom Back Button
+
             if isLoading {
                 ProgressView("Loading Favorites...")
                     .onAppear(perform: fetchFavoriteAssets)
@@ -20,8 +23,8 @@ struct FavoritesView: View {
                 FilteredSwipeStack(filterOptions: getFavoriteFilterOptions())
             }
         }
-        .navigationTitle("Favorites")
-        .navigationBarTitleDisplayMode(.inline)
+        .background(Color.black.ignoresSafeArea()) // Black background for the entire view
+        .navigationBarHidden(true) // Hide the default navigation bar
     }
 
     /// Fetch media assets marked as favorites

@@ -6,13 +6,22 @@
 //
 
 import SwiftUI
+import Photos
 
-struct SwipedMediaManager: View {
-    var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+class SwipedMediaManager {
+    static let shared = SwipedMediaManager()
+    private let swipedKey = "swipedMedia"
+
+    private init() {}
+
+    func addSwipedMedia(_ media: PHAsset) {
+        var swipedMedia = getSwipedMedia()
+        swipedMedia.insert(media.localIdentifier)
+        UserDefaults.standard.set(Array(swipedMedia), forKey: swipedKey)
     }
-}
 
-#Preview {
-    SwipedMediaManager()
+    func getSwipedMedia() -> Set<String> {
+        let saved = UserDefaults.standard.array(forKey: swipedKey) as? [String] ?? []
+        return Set(saved)
+    }
 }

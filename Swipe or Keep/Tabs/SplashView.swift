@@ -36,7 +36,7 @@ struct SplashView: View {
                 // Simulate progress
                 Timer.scheduledTimer(withTimeInterval: 0.03, repeats: true) { timer in
                     if progress < UIScreen.main.bounds.width - 100 {
-                        progress += 5 // Adjust the increment to speed up or slow down
+                        progress += 8 // Adjust the increment to speed up or slow down
                     } else {
                         timer.invalidate()
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {

@@ -9,14 +9,16 @@ struct SwipeStack: View {
     @State private var paginatedMediaItems: [PHAsset] = []
     @State private var mediaSize: String = "0 MB"
     @State private var isLoading = true
-    @State private var preloadedPlayers: [Int: AVQueuePlayer] = [:]
+    @State private var preloadedPlayers: [Int: (AVQueuePlayer, AVPlayerLooper?)] = [:]
+    @State private var highQualityImages: [Int: UIImage] = [:] // Cache for high-quality images
+    @State private var lowQualityImages: [Int: UIImage] = [:] // Cache for low-quality images
 
-    private let pageSize = 30 // Limit to 30 media items
+    private let pageSize = 30 // Limit to 30 media items -- ONLY FOR RANDOM
 
     var body: some View {
         ZStack {
             if isLoading {
-                ProgressView("Loading Media...")
+                ProgressView("Please Wait..")
                     .scaleEffect(1.5)
             } else {
                 GeometryReader { geometry in
@@ -28,6 +30,9 @@ struct SwipeStack: View {
                                 .padding(8)
                                 .onChange(of: currentIndex) {
                                     updateMediaSize() // Ensure real-time update
+                                    fetchHighQualityImage(for: currentIndex) // Fetch high-quality image for current index
+                                    fetchHighQualityImage(for: currentIndex + 1) // Preload high-quality image for the next media
+                                    pauseNonFocusedVideos() // Pause non-focused videos
                                 }
                             Spacer()
                             Text("\(currentIndex + 1)/\(mediaItems.count)")
@@ -43,15 +48,17 @@ struct SwipeStack: View {
                                 if index < paginatedMediaItems.count {
                                     MediaCardView(
                                         asset: paginatedMediaItems[index],
-                                        size: CGSize(width: geometry.size.width - CGFloat((index - currentIndex) * 10), height: geometry.size.height - CGFloat((index - currentIndex) * 10) - 60),
+                                        size: CGSize(width: geometry.size.width - CGFloat((index - currentIndex) * 15), height: geometry.size.height - CGFloat((index - currentIndex) * 15) - 60),
                                         offset: index == currentIndex ? $offset : .constant(.zero),
                                         onSwiped: handleSwipe,
-                                        player: preloadedPlayers[index]
+                                        player: preloadedPlayers[index]?.0,
+                                        highQualityImage: highQualityImages[index],
+                                        lowQualityImage: lowQualityImages[index] // Pass low-quality image
                                     )
                                     .zIndex(Double(-index))
                                     .offset(x: CGFloat((index - currentIndex) * 10), y: CGFloat((index - currentIndex) * 10))
-                                    .scaleEffect(index == currentIndex ? 1.0 : 0.9, anchor: .center)
-                                    .animation(.interpolatingSpring(stiffness: 300, damping: 50), value: currentIndex) // Smoother animation
+                                    .scaleEffect(index == currentIndex ? 1.0 : 0.95, anchor: .center)
+                                    .animation(.spring(response: 0.3, dampingFraction: 0.8, blendDuration: 0.2), value: currentIndex) // Improved animation
 
                                 }
                             }
@@ -62,10 +69,22 @@ struct SwipeStack: View {
                 }
             }
         }
+        .onAppear(perform: initializeAudioSession)
         .onAppear(perform: fetchMedia)
     }
 
-    // Fetch Media Items
+    // Initialize Audio Session
+    func initializeAudioSession() {
+        let audioSession = AVAudioSession.sharedInstance()
+        do {
+            try audioSession.setCategory(.playback, mode: .moviePlayback, options: [])
+            try audioSession.setActive(true)
+        } catch {
+            print("Failed to set audio session: \(error)")
+        }
+    }
+
+    // Fetch Media Items -- BI
     func fetchMedia() {
         isLoading = true
         DispatchQueue.global(qos: .userInitiated).async {
@@ -86,11 +105,14 @@ struct SwipeStack: View {
                 self.updateMediaSize()
                 self.preloadVideos()
                 self.isLoading = false
+                self.prefetchLowQualityImages() // Prefetch low-quality images
+                self.fetchHighQualityImage(for: currentIndex) // Preload the first image in high quality
+                self.fetchHighQualityImage(for: currentIndex + 1) // Preload the second image in high quality
             }
         }
     }
 
-    // Preload Videos
+    // Preload Videos -- BI
     func preloadVideos() {
         DispatchQueue.global(qos: .background).async {
             for (index, asset) in self.paginatedMediaItems.enumerated() where asset.mediaType == .video {
@@ -103,8 +125,9 @@ struct SwipeStack: View {
                     if let playerItem = playerItem {
                         DispatchQueue.main.async {
                             let player = AVQueuePlayer(playerItem: playerItem)
-                            _ = AVPlayerLooper(player: player, templateItem: playerItem)
-                            self.preloadedPlayers[index] = player
+                            player.volume = index == self.currentIndex ? 1.0 : 0.0 // Adjust audio volume
+                            let looper = AVPlayerLooper(player: player, templateItem: playerItem)
+                            self.preloadedPlayers[index] = (player, looper)
                         }
                     }
                 }
@@ -112,18 +135,90 @@ struct SwipeStack: View {
         }
     }
 
-    func handleSwipe(direction: SwipeDirection) {
-        if direction == .left || direction == .right {
-            withAnimation(.easeInOut(duration: 0.15)) { // Faster disappearance of the top card
-                offset.width = direction == .left ? -1000 : 1000
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) { // Match the animation duration
-                currentIndex += 1 // Update the index immediately after the swipe
-                offset = .zero
+    // Pause Non-Focused Videos
+    func pauseNonFocusedVideos() {
+        for (index, player) in preloadedPlayers {
+            if index != currentIndex {
+                player.0.pause()
+                player.0.volume = 0.0 // Mute non-focused videos
+            } else {
+                player.0.play()
+                player.0.volume = 1.0 // Enable audio for the current video
             }
         }
     }
 
+    // Fetch High-Quality Image
+    func fetchHighQualityImage(for index: Int) {
+        guard index < paginatedMediaItems.count else { return }
+        let asset = paginatedMediaItems[index]
+
+        let manager = PHImageManager.default()
+        let options = PHImageRequestOptions()
+        options.deliveryMode = .highQualityFormat
+        options.isSynchronous = false
+
+        manager.requestImage(for: asset, targetSize: CGSize(width: 1920, height: 1080), contentMode: .aspectFit, options: options) { result, _ in
+            if let result = result {
+                DispatchQueue.main.async {
+                    self.highQualityImages[index] = result
+                }
+            }
+        }
+    }
+
+    // Prefetch Low-Quality Images
+    func prefetchLowQualityImages() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            for (index, asset) in self.paginatedMediaItems.enumerated() {
+                let manager = PHImageManager.default()
+                let options = PHImageRequestOptions()
+                options.deliveryMode = .fastFormat
+                options.isSynchronous = true
+
+                manager.requestImage(for: asset, targetSize: CGSize(width: 640, height: 360), contentMode: .aspectFit, options: options) { result, _ in
+                    if let result = result {
+                        DispatchQueue.main.async {
+                            self.lowQualityImages[index] = result
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Swipe Handling - BI
+    func handleSwipe(direction: SwipeDirection) {
+        if direction == .left {
+            // Move the current item to the trash
+            if currentIndex < paginatedMediaItems.count {
+                let trashedItem = paginatedMediaItems[currentIndex]
+                TrashManager.shared.addToTrash(trashedItem) // Add to trash using the shared manager
+            }
+        }
+
+        // Trigger haptic feedback
+        let feedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
+        feedbackGenerator.impactOccurred()
+
+        withAnimation(.easeInOut(duration: 0.15)) { // Swipe animation
+            offset.width = direction == .left ? -1000 : 1000
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) { // Match animation duration
+            offset = .zero
+            currentIndex += 1 // Move to the next media
+            if currentIndex < paginatedMediaItems.count {
+                fetchHighQualityImage(for: currentIndex) // Load the next card's high-quality image
+                fetchHighQualityImage(for: currentIndex + 1) // Preload the image after that
+            }
+            pauseNonFocusedVideos()
+        }
+    }
+
+
+
+    // Media Size Handling - BI
 
     func updateMediaSize() {
         guard currentIndex < paginatedMediaItems.count else { return }
@@ -135,28 +230,42 @@ struct SwipeStack: View {
     }
 }
 
-// Updated MediaCardView
+// Updated MediaCardView -- BI
 struct MediaCardView: View {
     let asset: PHAsset
     let size: CGSize
     @Binding var offset: CGSize
     let onSwiped: (SwipeDirection) -> Void
     let player: AVQueuePlayer?
+    let highQualityImage: UIImage? // High-quality image passed
+    let lowQualityImage: UIImage? // Low-quality image passed
 
     var body: some View {
         ZStack {
-            if asset.mediaType == .image {
-                Image(uiImage: getUIImage(from: asset))
+            if let highQualityImage = highQualityImage {
+                Image(uiImage: highQualityImage)
                     .resizable()
                     .scaledToFit()
                     .frame(width: size.width, height: size.height)
                     .background(Color.black)
                     .clipped()
-            } else if asset.mediaType == .video, let player = player {
+                    .blur(radius: offset == .zero ? 0 : 10) // Add blur dynamically based on swipe offset
+            } else if let lowQualityImage = lowQualityImage {
+                Image(uiImage: lowQualityImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: size.width, height: size.height)
+                    .background(Color.black)
+                    .clipped()
+                    .blur(radius: offset == .zero ? 0 : 10) // Add blur dynamically based on swipe offset
+            }
+
+            if asset.mediaType == .video, let player = player {
                 VideoPlayer(player: player)
                     .frame(width: size.width, height: size.height)
                     .onAppear { player.play() }
                     .onDisappear { player.pause() }
+                    .blur(radius: offset == .zero ? 0 : 10) // Add blur dynamically for videos
             }
 
             if offset.width > 0 {
@@ -170,11 +279,13 @@ struct MediaCardView: View {
         .offset(offset)
         .gesture(
             DragGesture()
-                .onChanged { gesture in offset = gesture.translation }
+                .onChanged { gesture in
+                    offset = gesture.translation
+                }
                 .onEnded { _ in
-                    if offset.width > 150 {
+                    if offset.width > 100 {
                         onSwiped(.right)
-                    } else if offset.width < -150 {
+                    } else if offset.width < -100 {
                         onSwiped(.left)
                     } else {
                         withAnimation(.spring()) { offset = .zero }
@@ -182,37 +293,22 @@ struct MediaCardView: View {
                 }
         )
     }
+}
 
     private func getUIImage(from asset: PHAsset) -> UIImage {
         let manager = PHImageManager.default()
         let options = PHImageRequestOptions()
-        options.deliveryMode = .highQualityFormat
+        options.deliveryMode = .fastFormat // Lower media quality
         options.isSynchronous = true
 
         var image = UIImage()
-        manager.requestImage(for: asset, targetSize: CGSize(width: 1080, height: 1920), contentMode: .aspectFit, options: options) { result, _ in
+        manager.requestImage(for: asset, targetSize: CGSize(width: 640, height: 360), contentMode: .aspectFit, options: options) { result, _ in
             if let result = result {
                 image = result
             }
         }
         return image
     }
-}
-
-struct LabelView: View {
-    let text: String
-    let color: Color
-
-    var body: some View {
-        Text(text)
-            .font(.largeTitle)
-            .bold()
-            .foregroundColor(.white)
-            .padding()
-            .background(color.opacity(0.7))
-            .cornerRadius(10)
-    }
-}
 
 enum SwipeDirection {
     case left, right
