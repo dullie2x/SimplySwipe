@@ -258,26 +258,37 @@ struct FilteredSwipeStack: View {
     }
 
     func handleSwipe(direction: SwipeDirection) {
-        if direction == .left || direction == .right {
-            // Trigger haptic feedback
-            let feedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
-            feedbackGenerator.impactOccurred()
+        if currentIndex < paginatedMediaItems.count {
+            let currentItem = paginatedMediaItems[currentIndex]
 
-            withAnimation(.easeInOut(duration: 0.15)) {
-                offset.width = direction == .left ? -1000 : 1000
+            if direction == .left {
+                SwipedMediaManager.shared.addSwipedMedia(currentItem, toTrash: true)
+            } else if direction == .right {
+                SwipedMediaManager.shared.addSwipedMedia(currentItem, toTrash: false)
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) {
-                currentIndex += 1
-                offset = .zero
-                if currentIndex < mediaItems.count {
-                    fetchHighQualityImage(for: currentIndex, completion: nil)
-                    fetchHighQualityImage(for: currentIndex + 1, completion: nil)
-                }
-                pauseNonFocusedVideos()
+
+            // Stop playback of the current video's player
+            if let player = preloadedPlayers[currentIndex]?.0 {
+                player.pause()
+                player.volume = 0.0
             }
         }
-    }
 
+        // Trigger haptic feedback
+        let feedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
+        feedbackGenerator.impactOccurred()
+
+        withAnimation(.easeInOut(duration: 0.15)) {
+            offset.width = direction == .left ? -1000 : 1000
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) {
+            offset = .zero
+            currentIndex += 1
+
+            pauseNonFocusedVideos() // Ensure only the current video plays
+        }
+    }
 
     func updateMediaSize() {
         guard currentIndex < paginatedMediaItems.count else { return }

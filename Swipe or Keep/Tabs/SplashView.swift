@@ -2,44 +2,46 @@ import SwiftUI
 
 struct SplashView: View {
     @State private var isActive = false
-    @State private var progress: CGFloat = 0.0
+    @State private var simplyOffset: CGFloat = 0.0
+    @State private var swipeOffset: CGFloat = 0.0
 
     var body: some View {
         if isActive {
             MainTabView() // Replace with your main app view
         } else {
-            VStack {
-                Text("Simply Swipe")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                    .multilineTextAlignment(.center)
-                    .padding()
+            ZStack {
+                Color.black.edgesIgnoringSafeArea(.all)
 
-                // Loading Bar
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(height: 10)
-                    Capsule()
-                        .fill(Color.white)
-                        .frame(width: progress, height: 10)
-                        .animation(.easeInOut(duration: 3.0), value: progress)
+                VStack {
+                    Text("Simply")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .offset(x: simplyOffset) // Bind to offset for animation
+
+                    Text("Swipe")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .offset(x: swipeOffset) // Bind to offset for animation
                 }
-                .padding(.horizontal, 50)
-                .padding(.top, 20)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.black)
-            .edgesIgnoringSafeArea(.all) // Ensure it fills the entire screen
             .onAppear {
-                // Simulate progress
-                Timer.scheduledTimer(withTimeInterval: 0.03, repeats: true) { timer in
-                    if progress < UIScreen.main.bounds.width - 100 {
-                        progress += 8 // Adjust the increment to speed up or slow down
-                    } else {
-                        timer.invalidate()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                // Delay the start of the animation by 0.5 seconds
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    // Trigger "Simply" animation first
+                    withAnimation(.easeInOut(duration: 1.0)) {
+                        simplyOffset = -UIScreen.main.bounds.width // Move "Simply" left
+                    }
+
+                    // Trigger "Swipe" animation after "Simply" finishes
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { 
+                        withAnimation(.easeInOut(duration: 1.0)) {
+                            swipeOffset = UIScreen.main.bounds.width // Move "Swipe" right
+                        }
+
+                        // Transition to main view after "Swipe" animation
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                             isActive = true
                         }
                     }
@@ -47,4 +49,8 @@ struct SplashView: View {
             }
         }
     }
+}
+
+#Preview {
+    SplashView()
 }

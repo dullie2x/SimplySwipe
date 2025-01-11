@@ -12,7 +12,9 @@ struct SwipeStack: View {
     @State private var preloadedPlayers: [Int: (AVQueuePlayer, AVPlayerLooper?)] = [:]
     @State private var highQualityImages: [Int: UIImage] = [:] // Cache for high-quality images
     @State private var lowQualityImages: [Int: UIImage] = [:] // Cache for low-quality images
-
+    @State private var showBatchExhaustedNotice = false // Tracks if the notice should be displayed
+    @State private var swipeCount = UserDefaults.standard.integer(forKey: "swipeCount") // Persistent swipe counter
+    @State private var totalMediaCount = 0 // Total media on the device
     private let pageSize = 30 // Limit to 30 media items -- ONLY FOR RANDOM
 
     var body: some View {
@@ -35,16 +37,19 @@ struct SwipeStack: View {
                                     pauseNonFocusedVideos() // Pause non-focused videos
                                 }
                             Spacer()
-                            Text("\(currentIndex + 1)/\(mediaItems.count)")
+                            //Text("\(swipeCount)/\(totalMediaCount)")
+                            Text("Swipe Count: \(swipeCount)")
+
                                 .font(Font.title2.weight(.heavy))
                                 .foregroundColor(.green)
                                 .padding(8)
+
                         }
                         .padding(.horizontal, 20)
                         .zIndex(1)
 
                         ZStack {
-                            ForEach(currentIndex..<min(currentIndex + 2, paginatedMediaItems.count), id: \ .self) { index in
+                            ForEach(currentIndex..<min(currentIndex + 2, paginatedMediaItems.count), id: \.self) { index in
                                 if index < paginatedMediaItems.count {
                                     MediaCardView(
                                         asset: paginatedMediaItems[index],
@@ -59,7 +64,6 @@ struct SwipeStack: View {
                                     .offset(x: CGFloat((index - currentIndex) * 10), y: CGFloat((index - currentIndex) * 10))
                                     .scaleEffect(index == currentIndex ? 1.0 : 0.95, anchor: .center)
                                     .animation(.spring(response: 0.3, dampingFraction: 0.8, blendDuration: 0.2), value: currentIndex) // Improved animation
-
                                 }
                             }
                         }
@@ -67,6 +71,37 @@ struct SwipeStack: View {
                         .zIndex(0)
                     }
                 }
+            }
+
+            // Batch Exhausted Notice - will make better later
+            if showBatchExhaustedNotice {
+                VStack(spacing: 20) {
+                    Text("You've gone through 30 media items.")
+                        .font(.headline)
+                        .multilineTextAlignment(.center)
+                        .padding()
+
+                    Text("Would you like to fetch another batch? Consider clearing your trash to free up space.")
+                        .font(.subheadline)
+                        .multilineTextAlignment(.center)
+                        .padding()
+
+                    Button("Okay") {
+                        showBatchExhaustedNotice = false
+                        fetchMedia() // Fetch the next batch
+                    }
+                    .padding()
+                    .background(Color.green.opacity(0.8))
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                }
+                .frame(maxWidth: 300)
+                .padding()
+                .background(Color.black.opacity(0.7))
+                .cornerRadius(20)
+                .shadow(radius: 10)
+                .transition(.opacity) // Smooth appearance/disappearance
+                .zIndex(1) // Ensure it's above other views
             }
         }
         .onAppear(perform: initializeAudioSession)
@@ -85,32 +120,51 @@ struct SwipeStack: View {
     }
 
     // Fetch Media Items -- BI
+
     func fetchMedia() {
         isLoading = true
+        mediaItems = [] // Clear current media items to force UI refresh
+        paginatedMediaItems = [] // Clear paginated items to reset the swipe stack
+
         DispatchQueue.global(qos: .userInitiated).async {
             let fetchOptions = PHFetchOptions()
             fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
             fetchOptions.includeAssetSourceTypes = [.typeUserLibrary, .typeCloudShared, .typeiTunesSynced]
-            fetchOptions.fetchLimit = 30
 
+            // Fetch all media
             let result = PHAsset.fetchAssets(with: fetchOptions)
             var tempMediaItems: [PHAsset] = []
             result.enumerateObjects { asset, _, _ in
-                tempMediaItems.append(asset)
+                // Exclude previously swiped media
+                if !SwipedMediaManager.shared.isMediaSwiped(asset) {
+                    tempMediaItems.append(asset)
+                }
             }
 
+            // Shuffle the media items to randomize them
+            tempMediaItems.shuffle()
+
+            // Limit to page size for paginated items
+            let paginatedItems = Array(tempMediaItems.prefix(self.pageSize))
+
             DispatchQueue.main.async {
-                self.mediaItems = tempMediaItems
-                self.paginatedMediaItems = tempMediaItems
-                self.updateMediaSize()
-                self.preloadVideos()
-                self.isLoading = false
-                self.prefetchLowQualityImages() // Prefetch low-quality images
+                self.mediaItems = tempMediaItems // Update the full media list
+                self.paginatedMediaItems = paginatedItems // Update the current paginated stack
+                self.totalMediaCount = result.count // Update the total count dynamically
+                self.currentIndex = 0 // Reset the index for the new batch
+                self.isLoading = false // Hide the loading indicator
+                self.updateMediaSize() // Update the size information
+                self.preloadVideos() // Preload videos for the new batch
+                self.prefetchLowQualityImages() // Prefetch low-quality images for the new batch
                 self.fetchHighQualityImage(for: currentIndex) // Preload the first image in high quality
                 self.fetchHighQualityImage(for: currentIndex + 1) // Preload the second image in high quality
             }
         }
     }
+
+
+
+
 
     // Preload Videos -- BI
     func preloadVideos() {
@@ -124,10 +178,15 @@ struct SwipeStack: View {
                 manager.requestPlayerItem(forVideo: asset, options: options) { playerItem, _ in
                     if let playerItem = playerItem {
                         DispatchQueue.main.async {
-                            let player = AVQueuePlayer(playerItem: playerItem)
-                            player.volume = index == self.currentIndex ? 1.0 : 0.0 // Adjust audio volume
-                            let looper = AVPlayerLooper(player: player, templateItem: playerItem)
-                            self.preloadedPlayers[index] = (player, looper)
+                            if self.preloadedPlayers[index] == nil {
+                                let player = AVQueuePlayer(playerItem: playerItem)
+                                let looper = AVPlayerLooper(player: player, templateItem: playerItem)
+                                self.preloadedPlayers[index] = (player, looper)
+
+                                // Ensure the player is paused initially
+                                player.pause()
+                                player.volume = 0.0
+                            }
                         }
                     }
                 }
@@ -135,18 +194,24 @@ struct SwipeStack: View {
         }
     }
 
+
+
     // Pause Non-Focused Videos
     func pauseNonFocusedVideos() {
         for (index, player) in preloadedPlayers {
-            if index != currentIndex {
-                player.0.pause()
-                player.0.volume = 0.0 // Mute non-focused videos
-            } else {
+            if index == currentIndex {
+                // Play the video for the current index
                 player.0.play()
-                player.0.volume = 1.0 // Enable audio for the current video
+                player.0.volume = 1.0
+            } else {
+                // Pause all other videos
+                player.0.pause()
+                player.0.volume = 0.0
             }
         }
     }
+
+
 
     // Fetch High-Quality Image
     func fetchHighQualityImage(for index: Int) {
@@ -156,16 +221,26 @@ struct SwipeStack: View {
         let manager = PHImageManager.default()
         let options = PHImageRequestOptions()
         options.deliveryMode = .highQualityFormat
+        options.isNetworkAccessAllowed = true // Ensure network-based assets can be fetched
+        options.resizeMode = .exact
         options.isSynchronous = false
 
-        manager.requestImage(for: asset, targetSize: CGSize(width: 1920, height: 1080), contentMode: .aspectFit, options: options) { result, _ in
+        manager.requestImage(
+            for: asset,
+            targetSize: CGSize(width: 1920, height: 1080), // Full HD resolution
+            contentMode: .aspectFit,
+            options: options
+        ) { result, info in
             if let result = result {
                 DispatchQueue.main.async {
                     self.highQualityImages[index] = result
                 }
+            } else if let info = info, (info[PHImageErrorKey] as? NSError) != nil {
+                print("Error fetching high-quality image for index \(index): \(info)")
             }
         }
     }
+
 
     // Prefetch Low-Quality Images
     func prefetchLowQualityImages() {
@@ -187,33 +262,59 @@ struct SwipeStack: View {
         }
     }
 
-    // Swipe Handling - BI
+    // Swipe Handling
+
     func handleSwipe(direction: SwipeDirection) {
-        if direction == .left {
-            // Move the current item to the trash
-            if currentIndex < paginatedMediaItems.count {
-                let trashedItem = paginatedMediaItems[currentIndex]
-                TrashManager.shared.addToTrash(trashedItem) // Add to trash using the shared manager
+        if currentIndex < paginatedMediaItems.count {
+            let currentItem = paginatedMediaItems[currentIndex]
+
+            if direction == .left {
+                SwipedMediaManager.shared.addSwipedMedia(currentItem, toTrash: true)
+            } else if direction == .right {
+                SwipedMediaManager.shared.addSwipedMedia(currentItem, toTrash: false)
+            }
+
+            // Stop playback of the current video's player
+            if let player = preloadedPlayers[currentIndex]?.0 {
+                player.pause()
+                player.volume = 0.0
             }
         }
+
+        // Increment swipe count and save it
+        swipeCount += 1
+        UserDefaults.standard.set(swipeCount, forKey: "swipeCount")
 
         // Trigger haptic feedback
         let feedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
         feedbackGenerator.impactOccurred()
 
-        withAnimation(.easeInOut(duration: 0.15)) { // Swipe animation
+        withAnimation(.easeInOut(duration: 0.15)) {
             offset.width = direction == .left ? -1000 : 1000
         }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) { // Match animation duration
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) {
             offset = .zero
-            currentIndex += 1 // Move to the next media
+            currentIndex += 1
+
             if currentIndex < paginatedMediaItems.count {
-                fetchHighQualityImage(for: currentIndex) // Load the next card's high-quality image
-                fetchHighQualityImage(for: currentIndex + 1) // Preload the image after that
+                fetchHighQualityImage(for: currentIndex)
+                fetchHighQualityImage(for: currentIndex + 1)
+            } else {
+                handleBatchExhausted()
             }
-            pauseNonFocusedVideos()
+
+            pauseNonFocusedVideos() // Ensure only the current video plays
         }
+    }
+
+
+
+
+
+    func handleBatchExhausted() {
+        showBatchExhaustedNotice = true
+        isLoading = false // Stop showing the spinner
     }
 
 
@@ -250,15 +351,24 @@ struct MediaCardView: View {
                     .background(Color.black)
                     .clipped()
                     .blur(radius: offset == .zero ? 0 : 10) // Add blur dynamically based on swipe offset
-            } else if let lowQualityImage = lowQualityImage {
-                Image(uiImage: lowQualityImage)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: size.width, height: size.height)
-                    .background(Color.black)
-                    .clipped()
-                    .blur(radius: offset == .zero ? 0 : 10) // Add blur dynamically based on swipe offset
+            } else {
+                // Always display the low-quality image if high-quality isn't ready
+                if let lowQualityImage = lowQualityImage {
+                    Image(uiImage: lowQualityImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: size.width, height: size.height)
+                        .background(Color.black)
+                        .clipped()
+                        .blur(radius: offset == .zero ? 0 : 10) // Add blur dynamically based on swipe offset
+                } else {
+                    // Placeholder or fallback in case neither image is ready
+                    ProgressView()
+                        .frame(width: size.width, height: size.height)
+                        .background(Color.black)
+                }
             }
+
 
             if asset.mediaType == .video, let player = player {
                 VideoPlayer(player: player)
