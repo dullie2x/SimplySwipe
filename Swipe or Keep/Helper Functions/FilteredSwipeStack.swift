@@ -13,6 +13,7 @@ struct FilteredSwipeStack: View {
     @State private var preloadedPlayers: [Int: (AVQueuePlayer, AVPlayerLooper?)] = [:]
     @State private var highQualityImages: [Int: UIImage] = [:] // Cache for high-quality images
     @State private var lowQualityImages: [Int: UIImage] = [:] // Cache for low-quality images
+    @State private var swipeCount = UserDefaults.standard.integer(forKey: "swipeCount") // Persistent swipe counter
     @Environment(\.presentationMode) var presentationMode // To handle navigation
 
     private let pageSize = 30 // Limit to 30 media items -- ONLY FOR FILTERED
@@ -273,7 +274,9 @@ struct FilteredSwipeStack: View {
                 player.volume = 0.0
             }
         }
-
+        
+        swipeCount += 1
+        UserDefaults.standard.set(swipeCount, forKey: "swipeCount")
         // Trigger haptic feedback
         let feedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
         feedbackGenerator.impactOccurred()

@@ -13,7 +13,7 @@ struct MainView: View {
 
                 // Navigation Blocks
                 NavStackedBlocksView(
-                    blockTitles: ["Recents", "Year", "Screenshots", "Folders", "Favorites"]
+                    blockTitles: ["Recents", "Screenshots", "Favorites", "Years", "Albums"]
                 )
             }
             .background(Color.black.ignoresSafeArea()) // Black background for the entire view
