@@ -13,6 +13,10 @@ struct NavStackedBlocksView: View {
     @State private var selectedYearAssets: [PHAsset] = [] // Store fetched assets for selected year
     @State private var isFolderSelected = false // Track when a folder is clicked
     @State private var isYearSelected = false // Track when a year is clicked
+    
+    // Add loading states
+    @State private var isFoldersLoading = false
+    @State private var isYearsLoading = false
 
     var body: some View {
         NavigationView {
@@ -24,10 +28,7 @@ struct NavStackedBlocksView: View {
                 .padding(.horizontal, 3)
             }
             .background(Color.black)
-            .onAppear {
-                fetchFolders() // Fetch albums
-                fetchYears() // Fetch years dynamically
-            }
+            // Removed heavy operations from onAppear
         }
         .fullScreenCover(item: $selectedIndex) { item in
             destinationView(for: item.value)
@@ -56,7 +57,17 @@ struct NavStackedBlocksView: View {
     /// **Expandable Block for "Years" and "Albums"**
     private func expandableBlock(index: Int) -> some View {
         VStack {
-            Button(action: { toggleSection(index) }) {
+            Button(action: {
+                toggleSection(index)
+                // Only load data when section is expanded and data is empty
+                if expandedSections.contains(index) {
+                    if index == 3 && yearsList.isEmpty && !isYearsLoading {
+                        loadYearsInBackground()
+                    } else if index == 4 && folders.isEmpty && !isFoldersLoading {
+                        loadFoldersInBackground()
+                    }
+                }
+            }) {
                 blockView(index: index, showChevron: true)
             }
             .buttonStyle(PlainButtonStyle())
@@ -66,6 +77,22 @@ struct NavStackedBlocksView: View {
                     .padding(.horizontal, 10)
                     .transition(.opacity)
             }
+        }
+    }
+    
+    // Load years asynchronously
+    private func loadYearsInBackground() {
+        isYearsLoading = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            fetchYears()
+        }
+    }
+    
+    // Load folders asynchronously
+    private func loadFoldersInBackground() {
+        isFoldersLoading = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            fetchFolders()
         }
     }
 
@@ -114,8 +141,12 @@ struct NavStackedBlocksView: View {
     /// **Expanded Content for Years & Albums**
     private func expandedContent(for index: Int) -> some View {
         VStack {
-            if index == 3 { // ✅ Years Section
-                if yearsList.isEmpty {
+            if index == 3 { // Years Section
+                if isYearsLoading {
+                    ProgressView("Loading years...")
+                        .foregroundColor(.gray)
+                        .padding()
+                } else if yearsList.isEmpty {
                     Text("No Years Found")
                         .foregroundColor(.gray)
                         .padding()
@@ -128,15 +159,19 @@ struct NavStackedBlocksView: View {
                         }
                     }
                 }
-            } else if index == 4 { // ✅ Albums Section (Folders)
-                if folders.isEmpty {
+            } else if index == 4 { // Albums Section (Folders)
+                if isFoldersLoading {
+                    ProgressView("Loading albums...")
+                        .foregroundColor(.gray)
+                        .padding()
+                } else if folders.isEmpty {
                     Text("No Albums Found")
                         .foregroundColor(.gray)
                         .padding()
                 } else {
                     ForEach(folders, id: \.localIdentifier) { folder in
                         Button(action: {
-                            fetchAssets(for: folder) // ✅ Fetch assets for selected folder
+                            fetchAssets(for: folder) // Fetch assets for selected folder
                         }) {
                             albumBlock(title: folder.localizedTitle ?? "Unknown Album")
                         }
@@ -146,48 +181,61 @@ struct NavStackedBlocksView: View {
         }
     }
 }
+
 extension NavStackedBlocksView {
     /// **Fetch photos for the selected folder**
     private func fetchAssets(for collection: PHAssetCollection) {
-        let fetchOptions = PHFetchOptions()
-        fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)] // Sort by newest first
+        // Show activity indicator while loading
+        let tempIsFolderSelected = isFolderSelected
+        isFolderSelected = false // Reset to prevent showing old data
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            let fetchOptions = PHFetchOptions()
+            fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
 
-        let assets = PHAsset.fetchAssets(in: collection, options: fetchOptions) // ✅ Fetch only folder-specific assets
+            let assets = PHAsset.fetchAssets(in: collection, options: fetchOptions)
 
-        var tempAssets: [PHAsset] = []
-        assets.enumerateObjects { asset, _, _ in
-            tempAssets.append(asset)
-        }
+            var tempAssets: [PHAsset] = []
+            assets.enumerateObjects { asset, _, _ in
+                tempAssets.append(asset)
+            }
 
-        DispatchQueue.main.async {
-            self.selectedFolderAssets = tempAssets // ✅ Store assets for the selected folder
-            self.isFolderSelected = true // ✅ Open `FilteredSwipeStack`
+            DispatchQueue.main.async {
+                self.selectedFolderAssets = tempAssets
+                self.isFolderSelected = true
+            }
         }
     }
 
     /// **Fetch photos for the selected year**
     private func fetchAssets(forYear year: String) {
-        let fetchOptions = PHFetchOptions()
-        fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        // Show activity indicator while loading
+        let tempIsYearSelected = isYearSelected
+        isYearSelected = false // Reset to prevent showing old data
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            let fetchOptions = PHFetchOptions()
+            fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
 
-        let assets = PHAsset.fetchAssets(with: .image, options: fetchOptions)
+            let assets = PHAsset.fetchAssets(with: .image, options: fetchOptions)
 
-        var tempAssets: [PHAsset] = []
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "MMM ''yy"
+            var tempAssets: [PHAsset] = []
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "MMM ''yy"
 
-        assets.enumerateObjects { asset, _, _ in
-            if let creationDate = asset.creationDate {
-                let formattedDate = dateFormatter.string(from: creationDate)
-                if formattedDate == year {
-                    tempAssets.append(asset)
+            assets.enumerateObjects { asset, _, _ in
+                if let creationDate = asset.creationDate {
+                    let formattedDate = dateFormatter.string(from: creationDate)
+                    if formattedDate == year {
+                        tempAssets.append(asset)
+                    }
                 }
             }
-        }
 
-        DispatchQueue.main.async {
-            self.selectedYearAssets = tempAssets
-            self.isYearSelected = true // ✅ Open `FilteredSwipeStack` for years
+            DispatchQueue.main.async {
+                self.selectedYearAssets = tempAssets
+                self.isYearSelected = true
+            }
         }
     }
 
@@ -196,7 +244,7 @@ extension NavStackedBlocksView {
         let fetchOptions = PHFetchOptions()
         fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         
-        // ✅ Only fetch assets from the selected folder
+        // Only fetch assets from the selected folder
         fetchOptions.predicate = NSPredicate(format: "SELF IN %@", selectedFolderAssets)
         return fetchOptions
     }
@@ -206,12 +254,12 @@ extension NavStackedBlocksView {
         let fetchOptions = PHFetchOptions()
         fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         
-        // ✅ Only fetch assets from the selected year
+        // Only fetch assets from the selected year
         fetchOptions.predicate = NSPredicate(format: "SELF IN %@", selectedYearAssets)
         return fetchOptions
     }
 
-    /// **🌟 Year Block (Same UI as Main Blocks)**
+    /// **Year Block (Same UI as Main Blocks)**
     private func yearBlock(title: String) -> some View {
         RoundedRectangle(cornerRadius: 5)
             .fill(LinearGradient(
@@ -233,7 +281,7 @@ extension NavStackedBlocksView {
             .padding(.top, 2)
     }
 
-    /// **🌟 Album Block (Same UI as Main Blocks)**
+    /// **Album Block (Same UI as Main Blocks)**
     private func albumBlock(title: String) -> some View {
         RoundedRectangle(cornerRadius: 5)
             .fill(LinearGradient(
@@ -255,7 +303,7 @@ extension NavStackedBlocksView {
             .padding(.top, 2)
     }
 
-    /// **✅ Gradient Colors Function**
+    /// **Gradient Colors Function**
     private func gradientColors(for index: Int) -> [Color] {
         switch index {
         case 3: // Years Section
@@ -267,7 +315,7 @@ extension NavStackedBlocksView {
         }
     }
 
-    /// **✅ Destination View**
+    /// **Destination View**
     private func destinationView(for index: Int) -> some View {
         switch index {
         case 0:
@@ -286,20 +334,27 @@ extension NavStackedBlocksView {
         PHPhotoLibrary.requestAuthorization { status in
             guard status == .authorized else {
                 print("Photo access denied")
+                DispatchQueue.main.async {
+                    self.isFoldersLoading = false
+                }
                 return
             }
 
             let allFolders = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil)
-            var tempFolders: [PHAssetCollection] = [] // ✅ Store the full `PHAssetCollection`
+            var tempFolders: [PHAssetCollection] = []
 
-            allFolders.enumerateObjects { collection, _, _ in
-                if PHAsset.fetchAssets(in: collection, options: nil).count > 0 {
-                    tempFolders.append(collection) // ✅ Store the collection
+            // Use autoreleasepool to prevent memory pressure during enumeration
+            autoreleasepool {
+                allFolders.enumerateObjects { collection, _, _ in
+                    if PHAsset.fetchAssets(in: collection, options: nil).count > 0 {
+                        tempFolders.append(collection)
+                    }
                 }
             }
 
             DispatchQueue.main.async {
-                self.folders = tempFolders // ✅ Now stores PHAssetCollection instead of name/ID tuples
+                self.folders = tempFolders
+                self.isFoldersLoading = false
             }
         }
     }
@@ -312,28 +367,31 @@ extension NavStackedBlocksView {
         let assets = PHAsset.fetchAssets(with: .image, options: fetchOptions)
 
         let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "MMM ''yy" // ✅ Formats like "Jan '25"
+        dateFormatter.dateFormat = "MMM ''yy" // Formats like "Jan '25"
 
-        var uniqueDates: Set<String> = [] // ✅ Prevents duplicate months
+        var uniqueDates: Set<String> = [] // Prevents duplicate months
         var sortedDates: [(year: Int, month: Int, formatted: String)] = []
 
-        assets.enumerateObjects { asset, _, _ in
-            if let creationDate = asset.creationDate {
-                let formattedDate = dateFormatter.string(from: creationDate)
+        // Use autoreleasepool to prevent memory pressure
+        autoreleasepool {
+            assets.enumerateObjects { asset, _, _ in
+                if let creationDate = asset.creationDate {
+                    let formattedDate = dateFormatter.string(from: creationDate)
 
-                let calendar = Calendar.current
-                let components = calendar.dateComponents([.year, .month], from: creationDate)
+                    let calendar = Calendar.current
+                    let components = calendar.dateComponents([.year, .month], from: creationDate)
 
-                if let year = components.year, let month = components.month {
-                    if !uniqueDates.contains(formattedDate) { // ✅ Avoid duplicate months
-                        uniqueDates.insert(formattedDate)
-                        sortedDates.append((year, month, formattedDate))
+                    if let year = components.year, let month = components.month {
+                        if !uniqueDates.contains(formattedDate) { // Avoid duplicate months
+                            uniqueDates.insert(formattedDate)
+                            sortedDates.append((year, month, formattedDate))
+                        }
                     }
                 }
             }
         }
 
-        // ✅ Sort by Year (Descending), then by Month (Descending)
+        // Sort by Year (Descending), then by Month (Descending)
         sortedDates.sort {
             if $0.year == $1.year {
                 return $0.month > $1.month
@@ -343,6 +401,7 @@ extension NavStackedBlocksView {
 
         DispatchQueue.main.async {
             self.yearsList = sortedDates.map { $0.formatted }
+            self.isYearsLoading = false
         }
     }
 }
@@ -351,8 +410,4 @@ extension NavStackedBlocksView {
 struct IdentifiableInt: Identifiable {
     let id = UUID()
     let value: Int
-}
-
-#Preview {
-    NavStackedBlocksView()
 }

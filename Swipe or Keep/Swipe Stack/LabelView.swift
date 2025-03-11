@@ -1,8 +1,3 @@
-// LabelView.swift
-// Swipe or Keep
-//
-// Created by Gbolade Ariyo on 12/24/24.
-
 import SwiftUI
 
 struct LabelView: View {
@@ -12,8 +7,8 @@ struct LabelView: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 20)
-                .fill(color.opacity(0.85))
-                .shadow(radius: 10)
+                .fill(color.opacity(0.9)) // Slightly increased opacity for better contrast
+                .shadow(color: color.opacity(0.6), radius: 8, x: 0, y: 4) // Softer shadow for depth
 
             VStack(spacing: 5) {
                 Image(systemName: text == "Keep" ? "hand.thumbsup.fill" : "trash.fill")
@@ -21,13 +16,12 @@ struct LabelView: View {
                     .foregroundColor(.white)
 
                 Text(text)
-                    .font(.largeTitle)
+                    .font(.title)
                     .bold()
                     .foregroundColor(.white)
             }
         }
-        .frame(width: 150, height: 100)
-        .animation(.spring(), value: text) // Smooth transitions for label appearance
+        .frame(minWidth: 140, maxWidth: 160, minHeight: 90, maxHeight: 110) // Flexible frame for adaptability
     }
 }
 

@@ -6,8 +6,15 @@ struct TrashView: View {
     @State private var selectedItems: Set<String> = []
     @State private var isSelectionMode: Bool = false
     @State private var selectedAssetForFullScreen: PHAsset?
-
-    private let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+    @State private var isDeleting = false
+    @State private var isRecovering = false
+    
+    // Use adaptive columns based on device size
+    private var columns: [GridItem] {
+        let width = UIScreen.main.bounds.width
+        let columnCount = width > 700 ? 4 : 3  // More columns on iPad
+        return Array(repeating: GridItem(.flexible(), spacing: 10), count: columnCount)
+    }
 
     var body: some View {
         NavigationView {
@@ -28,16 +35,33 @@ struct TrashView: View {
                             Button(action: toggleSelectAll) {
                                 Text(selectedItems.count == swipedMediaManager.trashedMediaAssets.count ? "Deselect All" : "Select All")
                             }
+                            .disabled(isDeleting || isRecovering)
+                            
                             Spacer()
+                            
                             Button(action: recoverAll) {
-                                Text("Recover")
-                                    .foregroundColor(selectedItems.isEmpty ? .gray : .green)
+                                if isRecovering {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle())
+                                } else {
+                                    Text("Recover")
+                                        .foregroundColor(selectedItems.isEmpty ? .gray : .green)
+                                }
                             }
+                            .disabled(selectedItems.isEmpty || isDeleting || isRecovering)
+                            
                             Spacer()
+                            
                             Button(action: deleteAll) {
-                                Text("Delete")
-                                    .foregroundColor(selectedItems.isEmpty ? .gray : .red)
+                                if isDeleting {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle())
+                                } else {
+                                    Text("Delete")
+                                        .foregroundColor(selectedItems.isEmpty ? .gray : .red)
+                                }
                             }
+                            .disabled(selectedItems.isEmpty || isDeleting || isRecovering)
                         }
                         .padding()
                     }
@@ -63,6 +87,7 @@ struct TrashView: View {
                     }
                 }
             }
+            .navigationTitle("Trash")
             .toolbar {
                 // Toggle for Viewing/Selection Mode
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -70,6 +95,7 @@ struct TrashView: View {
                         Button(action: toggleSelectionMode) {
                             Text(isSelectionMode ? "Cancel" : "Select")
                         }
+                        .disabled(isDeleting || isRecovering)
                     }
                 }
             }
@@ -80,6 +106,7 @@ struct TrashView: View {
                     onClose: { selectedAssetForFullScreen = nil }
                 )
             }
+            .disabled(isDeleting || isRecovering) // Disable interaction during operations
         }
     }
 
@@ -110,13 +137,25 @@ struct TrashView: View {
     // Recover all selected items
     private func recoverAll() {
         guard !selectedItems.isEmpty else { return }
-        swipedMediaManager.recoverItems(with: selectedItems)
-        selectedItems.removeAll()
+        
+        isRecovering = true
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            swipedMediaManager.recoverItems(with: selectedItems)
+            
+            DispatchQueue.main.async {
+                selectedItems.removeAll()
+                isRecovering = false
+                isSelectionMode = false // Exit selection mode after operation
+            }
+        }
     }
 
     // Delete all selected items
     private func deleteAll() {
         guard !selectedItems.isEmpty else { return }
+        
+        isDeleting = true
 
         // Fetch the PHAssets corresponding to the selected identifiers
         let assetsToDelete = swipedMediaManager.trashedMediaAssets.filter { selectedItems.contains($0.localIdentifier) }
@@ -131,9 +170,11 @@ struct TrashView: View {
                     let deletedIdentifiers = Set(assetsToDelete.map { $0.localIdentifier })
                     swipedMediaManager.deleteItems(with: deletedIdentifiers)
                     selectedItems.removeAll()
+                    isSelectionMode = false // Exit selection mode after operation
                 } else if let error = error {
                     print("Failed to delete assets: \(error)")
                 }
+                isDeleting = false
             }
         }
     }
@@ -144,42 +185,8 @@ struct TrashView: View {
     }
 }
 
-
-
-    private func getThumbnail(from asset: PHAsset) -> UIImage? {
-        let manager = PHImageManager.default()
-        let options = PHImageRequestOptions()
-        options.deliveryMode = .highQualityFormat // Request high-quality images
-        options.resizeMode = .exact // Ensures images match the requested size
-        options.isSynchronous = true // Synchronous to simplify this implementation
-
-        var thumbnail: UIImage?
-        manager.requestImage(for: asset,
-                             targetSize: CGSize(width: 300, height: 300), // Higher resolution target
-                             contentMode: .aspectFill, // Crops to fill the target size
-                             options: options) { result, _ in
-            thumbnail = result
-        }
-        return thumbnail
-    }
-
-    private func getFullResolutionImage(from asset: PHAsset) -> UIImage? {
-        let manager = PHImageManager.default()
-        let options = PHImageRequestOptions()
-        options.deliveryMode = .highQualityFormat
-        options.isSynchronous = true
-
-        var fullResolutionImage: UIImage?
-        manager.requestImage(for: asset, targetSize: PHImageManagerMaximumSize, contentMode: .aspectFit, options: options) { result, _ in
-            fullResolutionImage = result
-        }
-        return fullResolutionImage
-    }
-
-
 extension PHAsset: @retroactive Identifiable {
     public var id: String {
         self.localIdentifier
     }
 }
-

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct PaywallView: View {
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) var dismiss
     @State private var animate = false
 
     var body: some View {
@@ -18,7 +18,7 @@ struct PaywallView: View {
                 // Close Button (Top-Right)
                 HStack {
                     Spacer()
-                    Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                    Button(action: { dismiss() }) {
                         Image(systemName: "xmark.circle.fill")
                             .resizable()
                             .frame(width: 30, height: 30)
@@ -43,16 +43,24 @@ struct PaywallView: View {
                         .foregroundColor(.white.opacity(0.8))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 20)
-                        .padding(.vertical, 20)
+                        .padding(.vertical, 10)
                 }
                 .padding(.top, -20)
 
                 // Pricing Options
-                VStack(spacing: 25) {
-                    PaywallOption(title: "Unlimited Swipes - Monthly", price: "$2.99 / Month", highlight: false, animate: $animate)
-                    PaywallOption(title: "Unlimited Swipes - Yearly", price: "$14.99 / Year", highlight: true, animate: $animate)
-                    PaywallOption(title: "Lifetime Access", price: "$29.99 One-Time", highlight: false, animate: $animate)
-                    PaywallOption(title: "200 Extra Swipes", price: "$0.99 One-Time", highlight: false, animate: $animate)
+                VStack(spacing: 20) {
+                    PaywallOption(title: "Unlimited Swipes - Monthly", price: "$2.99 / Month", highlight: false, animate: $animate) {
+                        // Purchase logic for Monthly Plan
+                    }
+                    PaywallOption(title: "Unlimited Swipes - Yearly", price: "$14.99 / Year", highlight: true, animate: $animate) {
+                        // Purchase logic for Yearly Plan
+                    }
+                    PaywallOption(title: "Lifetime Access", price: "$29.99 One-Time", highlight: false, animate: $animate) {
+                        // Purchase logic for Lifetime Plan
+                    }
+                    PaywallOption(title: "200 Extra Swipes", price: "$0.99 One-Time", highlight: false, animate: $animate) {
+                        // Purchase logic for Extra Swipes
+                    }
                 }
                 .padding(.horizontal, 20)
 
@@ -68,7 +76,7 @@ struct PaywallView: View {
                         .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.7))
                 }
-                .padding(.top, 80)
+                .padding(.top, 60)
                 
                 Spacer()
             }
@@ -77,13 +85,13 @@ struct PaywallView: View {
     }
 }
 
-// Unified Paywall Option Button (Handles both normal & highlighted options)
+// Unified Paywall Option Button
 struct PaywallOption: View {
     let title: String
     let price: String
     let highlight: Bool
     @Binding var animate: Bool
-    let action: () -> Void = {}
+    let action: () -> Void
 
     var body: some View {
         Button(action: action) {
@@ -93,12 +101,9 @@ struct PaywallOption: View {
                         .font(.system(size: highlight ? 16 : 18, weight: .bold))
                         .foregroundColor(highlight ? .black : .white)
                     
-                    HStack {
-                        Text(price)
-                            .font(.system(size: 18, weight: highlight ? .bold : .regular))
-                            .foregroundColor(highlight ? .red : .white.opacity(0.8))
-                        
-                    }
+                    Text(price)
+                        .font(.system(size: 18, weight: highlight ? .bold : .regular))
+                        .foregroundColor(highlight ? .red : .white.opacity(0.8))
                 }
                 Spacer()
                 

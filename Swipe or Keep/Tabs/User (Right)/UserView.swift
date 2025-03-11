@@ -2,150 +2,205 @@ import SwiftUI
 import Photos
 
 struct UserView: View {
+    // Load data from UserDefaults immediately to prevent layout changes
     @State private var photoCount = UserDefaults.standard.integer(forKey: "photoCount")
     @State private var videoCount = UserDefaults.standard.integer(forKey: "videoCount")
-    @State private var swipeCount = UserDefaults.standard.integer(forKey: "swipeCount") // Tracks total swipes
-    @State private var isFetching = false // Background fetching indicator
-    @State private var showPaywall = false // Controls paywall visibility
+    @State private var swipeCount = UserDefaults.standard.integer(forKey: "swipeCount")
+    @State private var isFetching = false
+    @State private var showPaywall = false
     
-    // ✅ Check if the user has unlimited swipes
+    // Check if the user has unlimited swipes
+    private var isSubscribed: Bool {
+        UserDefaults.standard.bool(forKey: "isSubscribed")
+    }
+    
     private var swipesLeft: String {
-        let isSubscribed = UserDefaults.standard.bool(forKey: "isSubscribed")
-        let remainingSwipes = max(75 - swipeCount, 0) // 75 swipes per day
-
-        return isSubscribed ? "Unlimited" : "\(remainingSwipes)"
+        isSubscribed ? "Unlimited" : "\(max(75 - swipeCount, 0))"
     }
 
     var body: some View {
-        VStack {
-            // Header
-            Text("User Stats")
-                .font(.largeTitle.weight(.bold))
-                .foregroundColor(.white)
-                .padding(.top, 20)
-
-            Spacer().frame(height: 20)
-
-            // Stats Section
-            VStack(alignment: .leading, spacing: 25) {
-                statRow(title: "Photos", value: "\(photoCount)")
-                statRow(title: "Videos", value: "\(videoCount)")
-                statRow(title: "Total Swipes", value: "\(swipeCount)")
-                statRow(title: "Swipes Left", value: swipesLeft)
-            }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.gray.opacity(0.2))
-            )
-            .padding(.horizontal, 16)
-
-            Spacer()
-
-            if isFetching {
-                ProgressView("Refreshing stats...")
-                    .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+        ScrollView {
+            VStack(spacing: 0) {
+                // Header
+                Text("User Profile")
+                     .font(.system(size: 32, weight: .bold))
+                     .foregroundColor(.white)
+                     .frame(maxWidth: .infinity, alignment: .center)
+                     .padding(.top, 30)
+                     .padding(.bottom, 20)
+                
+                // Stats Section with feedback options integrated
+                VStack(spacing: 15) {
+                    statCard(icon: "photo", title: "Photos", value: "\(photoCount)")
+                    statCard(icon: "video", title: "Videos", value: "\(videoCount)")
+                    statCard(icon: "hand.tap", title: "Total Swipes", value: "\(swipeCount)")
+                    statCard(icon: "arrow.left.arrow.right", title: "Swipes Left", value: swipesLeft, highlight: !isSubscribed)
+                    
+                    // Feedback and Rate options as stat cards
+                    Button(action: {
+                        // Open feedback
+                    }) {
+                        statActionCard(icon: "message.fill", title: "Send Feedback")
+                    }
+                    
+                    Button(action: {
+                        // Rate app
+                    }) {
+                        statActionCard(icon: "star.fill", title: "Rate This App")
+                    }
+                }
+                .padding(.vertical, 25)
+                
+                // Upgrade Section (Only if not subscribed)
+                if !isSubscribed {
+                    VStack(spacing: 15) {
+                        Text("Want unlimited swipes?")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        
+                        Button(action: { showPaywall.toggle() }) {
+                            HStack {
+                                Image(systemName: "star.fill")
+                                    .foregroundColor(.black)
+                                Text("Upgrade Now")
+                                    .font(.headline)
+                                    .foregroundColor(.black)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.green)
+                            .cornerRadius(12)
+                            .shadow(color: Color.green.opacity(0.5), radius: 5, x: 0, y: 2)
+                        }
+                        .padding(.horizontal, 30)
+                    }
+                    .padding(.vertical, 20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 15)
+                            .fill(Color.black.opacity(0.6))
+                    )
+                    .padding(.horizontal, 16)
                     .padding(.bottom, 20)
-            }
-
-            // Upgrade Button (Only if not subscribed)
-            if !UserDefaults.standard.bool(forKey: "isSubscribed") {
-                Button(action: { showPaywall.toggle() }) {
-                    Text("Upgrade to Unlimited Swipes")
-                        .font(.headline)
-                        .foregroundColor(.black)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color.yellow)
-                        .cornerRadius(10)
-                        .shadow(radius: 5)
+                } else {
+                    // Spacer to ensure consistent layout even when upgrade section isn't shown
+                    Spacer().frame(height: 80)
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 10)
-            }
-
-            // Feedback Section
-            VStack(spacing: 10) {
-                Text("Enjoying the app? Or not?")
-                    .foregroundColor(.white)
-                    .font(.subheadline)
-
-                Text("We would love to hear some feedback!")
-                    .foregroundColor(.gray)
-                    .font(.footnote)
-
-                Button(action: {
-                    print("Feedback button tapped")
-                    // Navigate to feedback page or show feedback form here
-                }) {
-                    Text("Feedback")
-                        .font(.footnote)
-                        .foregroundColor(.black)
-                        .padding()
-                        .frame(maxWidth: 100, maxHeight: 40)
-                        .background(Color.green)
-                        .cornerRadius(6)
+                
+                // Loading indicator moved below the upgrade button
+                if isFetching {
+                    HStack {
+                        ProgressView()
+                            .scaleEffect(1.2)
+                        Text("Refreshing stats...")
+                            .foregroundColor(.gray)
+                            .padding(.leading, 10)
+                    }
+                    .padding()
                 }
+                
+                // Add a bottom spacer for consistent layout
+                Spacer().frame(height: 20)
             }
-            .padding(.bottom, 20)
+            .frame(maxWidth: .infinity)
         }
         .background(Color.black.edgesIgnoringSafeArea(.all))
         .onAppear {
-            refreshMediaStats()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                refreshMediaStats()
+            }
         }
         .fullScreenCover(isPresented: $showPaywall) {
             PaywallView()
         }
     }
-
-    /// **Helper Function for Stats Row**
-    private func statRow(title: String, value: String) -> some View {
+    // Action stat card (for feedback, rate, share)
+    private func statActionCard(icon: String, title: String) -> some View {
         HStack {
+            Image(systemName: icon)
+                .font(.system(size: 24))
+                .foregroundColor(.green)
+                .frame(width: 40)
+            
             Text(title)
-                .font(.title3.weight(.semibold))
+                .font(.system(size: 18, weight: .medium))
                 .foregroundColor(.white)
+            
             Spacer()
-            Text(value)
-                .font(.title3)
+            
+            Image(systemName: "chevron.right")
                 .foregroundColor(.gray)
         }
+        .padding(.vertical, 16)
+        .padding(.horizontal, 20)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.gray.opacity(0.15))
+        )
+        .padding(.horizontal, 16)
     }
 
-    /// **Fetch & Update User Stats**
+    /// Stylized stat card with icon
+    private func statCard(icon: String, title: String, value: String, highlight: Bool = false) -> some View {
+        HStack {
+            Image(systemName: icon)
+                .font(.system(size: 24))
+                .foregroundColor(.green)
+                .frame(width: 40)
+            
+            Text(title)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundColor(.white)
+            
+            Spacer()
+            
+            Text(value)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(highlight ? .green : .gray)
+        }
+        .padding(.vertical, 16)
+        .padding(.horizontal, 20)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.gray.opacity(0.15))
+        )
+        .padding(.horizontal, 16)
+    }
+    
+    /// Fetch & Update User Stats with better performance
     func refreshMediaStats() {
+        guard !isFetching else { return }
         isFetching = true
-        PHPhotoLibrary.requestAuthorization { status in
-            if status == .authorized {
-                let fetchOptions = PHFetchOptions()
-                let allAssets = PHAsset.fetchAssets(with: fetchOptions)
-
-                var newPhotoCount = 0
-                var newVideoCount = 0
-
-                allAssets.enumerateObjects { asset, _, _ in
-                    if asset.mediaType == .image {
-                        newPhotoCount += 1
-                    } else if asset.mediaType == .video {
-                        newVideoCount += 1
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            PHPhotoLibrary.requestAuthorization { status in
+                guard status == .authorized else {
+                    DispatchQueue.main.async {
+                        isFetching = false
                     }
+                    return
                 }
-
-                // ✅ Update the counts and cache them
+                
+                // Use separate fetch requests for better performance
+                let photoOptions = PHFetchOptions()
+                photoOptions.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.image.rawValue)
+                let photos = PHAsset.fetchAssets(with: photoOptions)
+                
+                let videoOptions = PHFetchOptions()
+                videoOptions.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.video.rawValue)
+                let videos = PHAsset.fetchAssets(with: videoOptions)
+                
+                // Update the counts on the main thread
                 DispatchQueue.main.async {
-                    photoCount = newPhotoCount
-                    videoCount = newVideoCount
-                    UserDefaults.standard.set(newPhotoCount, forKey: "photoCount")
-                    UserDefaults.standard.set(newVideoCount, forKey: "videoCount")
+                    photoCount = photos.count
+                    videoCount = videos.count
+                    UserDefaults.standard.set(photoCount, forKey: "photoCount")
+                    UserDefaults.standard.set(videoCount, forKey: "videoCount")
                     isFetching = false
                 }
-            } else {
-                print("Access to photos denied")
-                isFetching = false
             }
         }
     }
 }
-
 #Preview {
     UserView()
 }

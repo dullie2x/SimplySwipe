@@ -3,17 +3,17 @@ import Photos
 
 struct FavoritesView: View {
     @State private var isLoading = true
-    @State private var favoriteAssets: [PHAsset] = []
-    @Environment(\.presentationMode) var presentationMode // To handle navigation
-
+    @State private var hasFavorites = false
+    @Environment(\.presentationMode) var presentationMode
+    
     var body: some View {
-        VStack(spacing: 10) { // Reduced spacing between back button and content
-            // Custom Back Button
-
+        VStack(spacing: 10) {
+            // Custom Back Button would go here
+            
             if isLoading {
                 ProgressView("Loading Favorites...")
-                    .onAppear(perform: fetchFavoriteAssets)
-            } else if favoriteAssets.isEmpty {
+                    .onAppear(perform: checkForFavorites)
+            } else if !hasFavorites {
                 Text("No favorite media found.")
                     .font(.title)
                     .foregroundColor(.gray)
@@ -23,30 +23,27 @@ struct FavoritesView: View {
                 FilteredSwipeStack(filterOptions: getFavoriteFilterOptions())
             }
         }
-        .background(Color.black.ignoresSafeArea()) // Black background for the entire view
-        .navigationBarHidden(true) // Hide the default navigation bar
+        .background(Color.black.ignoresSafeArea())
+        .navigationBarHidden(true)
     }
-
-    /// Fetch media assets marked as favorites
-    private func fetchFavoriteAssets() {
+    
+    /// Just check if there are ANY favorites (faster than fetching all)
+    private func checkForFavorites() {
         DispatchQueue.global(qos: .userInitiated).async {
             let fetchOptions = PHFetchOptions()
             fetchOptions.predicate = NSPredicate(format: "isFavorite == YES")
-            fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-
+            fetchOptions.fetchLimit = 1 // Only need to check if at least one exists
+            
             let results = PHAsset.fetchAssets(with: fetchOptions)
-            var assets: [PHAsset] = []
-            results.enumerateObjects { asset, _, _ in
-                assets.append(asset)
-            }
-
+            let hasFavorites = results.count > 0
+            
             DispatchQueue.main.async {
-                self.favoriteAssets = assets
+                self.hasFavorites = hasFavorites
                 self.isLoading = false
             }
         }
     }
-
+    
     /// Generate a PHFetchOptions instance for favorites
     private func getFavoriteFilterOptions() -> PHFetchOptions {
         let fetchOptions = PHFetchOptions()
@@ -54,8 +51,4 @@ struct FavoritesView: View {
         fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         return fetchOptions
     }
-}
-
-#Preview {
-    FavoritesView()
 }
