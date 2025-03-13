@@ -1,6 +1,7 @@
 import SwiftUI
 import Photos
 
+// Your ThumbnailCache class
 class ThumbnailCache {
     static let shared = ThumbnailCache()
     
@@ -42,6 +43,7 @@ class ThumbnailCache {
     }
 }
 
+// Updated MediaThumbnailView with theme colors
 struct MediaThumbnailView: View {
     let asset: PHAsset
     let isSelected: Bool
@@ -52,70 +54,127 @@ struct MediaThumbnailView: View {
     @State private var isLoading = false
     @State private var loadFailed = false
     
+    // Theme colors based on the app's design
+    private let gradientStart = Color(red: 0.2, green: 0.6, blue: 0.3) // Green
+    private let gradientEnd = Color(red: 0.2, green: 0.4, blue: 0.8) // Blue
+    
     // Scale based on screen scale factor to ensure proper resolution
     private let targetSize: CGSize = {
         let scale = UIScreen.main.scale
-        return CGSize(width: 200 * scale, height: 200 * scale)
+        return CGSize(width: 300 * scale, height: 300 * scale)
     }()
+    
+    // Dynamic height for thumbnail
+    private var thumbnailHeight: CGFloat {
+        return 130
+    }
 
     var body: some View {
-        ZStack {
-            if let thumbnail = thumbnail {
-                Image(uiImage: thumbnail)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 100, height: 100)
-                    .clipped()
-                    .cornerRadius(8)
-            } else if isLoading {
-                // Show spinner while loading
-                ProgressView()
-                    .frame(width: 100, height: 100)
-                    .background(Color.gray.opacity(0.3))
-                    .cornerRadius(8)
-            } else if loadFailed {
-                // Show error visual if load failed
-                ZStack {
+        ZStack(alignment: .topTrailing) {
+            // Media thumbnail
+            Group {
+                if let thumbnail = thumbnail {
+                    Image(uiImage: thumbnail)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else if isLoading {
                     Rectangle()
-                        .fill(Color.gray.opacity(0.5))
-                        .frame(width: 100, height: 100)
-                        .cornerRadius(8)
-                    
-                    Image(systemName: "exclamationmark.triangle")
-                        .foregroundColor(.yellow)
-                        .font(.system(size: 24))
+                        .fill(Color(UIColor.systemGray6))
+                        .overlay {
+                            ProgressView()
+                                .tint(.white)
+                        }
+                } else if loadFailed {
+                    Rectangle()
+                        .fill(Color.black.opacity(0.5))
+                        .overlay {
+                            VStack(spacing: 8) {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .foregroundColor(.yellow)
+                                    .font(.system(size: 24))
+                                
+                                Text("Tap to retry")
+                                    .font(.caption)
+                                    .foregroundColor(.white)
+                            }
+                        }
                 }
-                .onTapGesture {
-                    // Retry on tap if failed
-                    loadFailed = false
-                    loadThumbnail()
+                else {
+                    Rectangle()
+                        .fill(Color(UIColor.systemGray6))
                 }
-            } else {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.5))
-                    .frame(width: 100, height: 100)
-                    .cornerRadius(8)
-                    .onAppear {
-                        loadThumbnail()
-                    }
             }
-
-            // Checkmark overlay in Selection Mode
-            if isSelectionMode && isSelected {
+            .frame(height: thumbnailHeight)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .contentShape(Rectangle())
+            .overlay(
+                Group {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 10)
+                            .strokeBorder(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [gradientStart, gradientEnd]),
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 3
+                            )
+                    }
+                }
+            )
+            .shadow(color: .black.opacity(0.3), radius: 3, x: 0, y: 2)
+            
+            // Media type indicator (video/image)
+            if asset.mediaType == .video {
+                HStack(spacing: 4) {
+                    Image(systemName: "video.fill")
+                        .font(.caption)
+                    
+                    Text(timeString(from: asset.duration))
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Color.black.opacity(0.6))
+                .cornerRadius(6)
+                .padding(6)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .foregroundColor(.white)
+            }
+            
+            // Selection checkmark
+            if isSelectionMode {
                 ZStack {
                     Circle()
-                        .fill(Color.blue)
-                        .frame(width: 24, height: 24)
-                        .offset(x: 35, y: -35)
-
-                    Image(systemName: "checkmark")
-                        .foregroundColor(.white)
-                        .offset(x: 35, y: -35)
+                        .fill(isSelected ? gradientEnd : Color.black.opacity(0.6))
+                        .frame(width: 26, height: 26)
+                        .overlay(
+                            Circle()
+                                .strokeBorder(isSelected ? gradientStart : Color.white.opacity(0.7), lineWidth: 2)
+                        )
+                    
+                    if isSelected {
+                        Image(systemName: "checkmark")
+                            .font(.caption.bold())
+                            .foregroundColor(.white)
+                    }
                 }
+                .padding(6)
             }
         }
         .onTapGesture {
-            onTap()
+            if loadFailed {
+                // Retry on tap if failed
+                loadFailed = false
+                loadThumbnail()
+            } else {
+                onTap()
+                hapticFeedback(style: .light)
+            }
+        }
+        .onAppear {
+            loadThumbnail()
         }
     }
 
@@ -174,5 +233,15 @@ struct MediaThumbnailView: View {
                 // Note: If this is a degraded (low-res) image, we'll get another callback with the high-res version
             }
         }
+    }
+    
+    private func timeString(from seconds: TimeInterval) -> String {
+        let minutes = Int(seconds) / 60
+        let remainingSeconds = Int(seconds) % 60
+        return String(format: "%d:%02d", minutes, remainingSeconds)
+    }
+    
+    private func hapticFeedback(style: UIImpactFeedbackGenerator.FeedbackStyle) {
+        UIImpactFeedbackGenerator(style: style).impactOccurred()
     }
 }

@@ -76,8 +76,51 @@ struct SwipeStack: View {
     
     var body: some View {
         ZStack {
+            // Black background applied to entire view
+            Color.black.edgesIgnoringSafeArea(.all)
+            
             if isLoading {
-                ProgressView("Please Wait..").scaleEffect(1.5)
+                // Enhanced loading view without background that might cause outline
+                VStack(spacing: 25) {
+                    // Green glowing circle with spinner - no background on this container
+                    ZStack {
+                        // Outer glow effect
+                        Circle()
+                            .fill(Color.green.opacity(0.2))
+                            .frame(width: 120, height: 120)
+                            .blur(radius: 10)
+                        
+                        // Inner circle
+                        Circle()
+                            .fill(Color.black)
+                            .frame(width: 100, height: 100)
+                            .overlay(
+                                Circle()
+                                    .stroke(
+                                        LinearGradient(
+                                            gradient: Gradient(colors: [Color.green.opacity(0.8), Color.green.opacity(0.4)]),
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 3
+                                    )
+                            )
+                        
+                        // Progress spinner
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color.green))
+                    }
+                    
+                    // Loading text
+                    Text("Getting Things Ready!")
+                        .font(.title2.bold())
+                        .foregroundColor(.white)
+                        .shadow(color: Color.green.opacity(0.5), radius: 2)
+                }
+                // Removed padding that might cause outline
+                .scaleEffect(1.0)
+                .animation(Animation.easeInOut(duration: 1).repeatForever(autoreverses: true), value: UUID())
             } else {
                 GeometryReader { geometry in
                     VStack(spacing: 0) {
@@ -86,7 +129,10 @@ struct SwipeStack: View {
                     }
                 }
             }
-            if showBatchExhaustedNotice { batchExhaustedNotice() }
+            
+            if showBatchExhaustedNotice {
+                batchExhaustedNotice()
+            }
         }
         .onAppear {
             MediaManager.shared.initializeAudioSession()
@@ -221,7 +267,7 @@ struct SwipeStack: View {
             }
         }
     }
-
+    
     // Separate method for high-quality image loading
     private func preloadHighQualityImage(for index: Int) {
         MediaManager.shared.fetchHighQualityImage(for: index, in: paginatedMediaItems) { index, image in
@@ -230,7 +276,7 @@ struct SwipeStack: View {
             }
         }
     }
-
+    
     // Update preloadImages to load more images ahead
     private func preloadImages() {
         // Preload several images ahead
@@ -295,21 +341,75 @@ struct SwipeStack: View {
     }
     
     private func batchExhaustedNotice() -> some View {
-        VStack {
-            Text("You've gone through 30 media items.").font(.headline).padding()
-            Button("Okay") {
+        VStack(spacing: 20) {
+            // Title with icon
+            HStack {
+                Image(systemName: "pause.circle.fill")
+                    .foregroundColor(.green)
+                    .font(.system(size: 24))
+                
+                Text("Quick Pause")
+                    .font(.title3.bold())
+                    .foregroundColor(.white)
+            }
+            
+            // Main message
+            Text("Consider emptying your trash to free up space.")
+                .font(.headline)
+                .foregroundColor(.white.opacity(0.9))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            
+            // Continue button only
+            Button(action: {
                 showBatchExhaustedNotice = false
                 fetchMedia()
+            }) {
+                HStack {
+                    Image(systemName: "arrow.right.circle")
+                        .font(.system(size: 14))
+                    Text("Continue")
+                        .fontWeight(.semibold)
+                }
+                .padding(.vertical, 12)
+                .padding(.horizontal, 24)
+                .frame(minWidth: 160)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.green.opacity(0.8), Color.blue.opacity(0.8)]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .foregroundColor(.white)
+                .cornerRadius(10)
             }
-            .padding()
-            .background(Color.green.opacity(0.8))
-            .foregroundColor(.white)
-            .cornerRadius(10)
         }
-        .frame(maxWidth: 300)
-        .padding()
-        .background(Color.black.opacity(0.7))
-        .cornerRadius(20)
-        .shadow(radius: 10)
+        .padding(.vertical, 25)
+        .padding(.horizontal, 20)
+        .frame(maxWidth: 350)
+        .background(
+            // Custom background with gradient edge
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.black.opacity(0.85))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    Color.green.opacity(0.7),
+                                    Color.blue.opacity(0.5),
+                                    Color.black.opacity(0.0),
+                                    Color.black.opacity(0.0),
+                                    Color.green.opacity(0.7)
+                                ]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 2
+                        )
+                )
+        )
+        .shadow(color: Color.green.opacity(0.3), radius: 15, x: 0, y: 0)
     }
 }

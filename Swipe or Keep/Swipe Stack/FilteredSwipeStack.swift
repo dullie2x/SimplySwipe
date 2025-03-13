@@ -76,6 +76,15 @@ struct FilteredSwipeStack: View {
                     
                     Spacer() // Add spacer after size to center it
                     
+                    // Go back button
+                    Button(action: goBack) {
+                        Image(systemName: "arrow.uturn.left")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundColor(currentIndex > 0 ? .green : .gray)
+                            .padding(8)
+                    }
+                    .disabled(currentIndex == 0) // Disable button if at the first item
+                    
                     Text("\(currentIndex + 1)/\(mediaItems.count)")
                         .font(Font.title2.weight(.heavy))
                         .foregroundColor(.green)
@@ -91,15 +100,54 @@ struct FilteredSwipeStack: View {
             // Main content
             ZStack {
                 if isLoading {
-                    VStack {
-                        ProgressView("Loading Media...", value: loadingProgress, total: 1.0)
-                            .progressViewStyle(CircularProgressViewStyle())
-                            .scaleEffect(1.5)
-                            .padding()
-                        Text("\(Int(loadingProgress * 100))%")
-                            .font(.headline)
-                            .foregroundColor(.green)
+                    VStack(spacing: 25) {
+                        // Green glowing circle with spinner
+                        ZStack {
+                            // Outer glow effect
+                            Circle()
+                                .fill(Color.green.opacity(0.2))
+                                .frame(width: 120, height: 120)
+                                .blur(radius: 10)
+                            
+                            // Inner circle
+                            Circle()
+                                .fill(Color.black)
+                                .frame(width: 100, height: 100)
+                                .overlay(
+                                    Circle()
+                                        .stroke(
+                                            LinearGradient(
+                                                gradient: Gradient(colors: [Color.green.opacity(0.8), Color.green.opacity(0.4)]),
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            ),
+                                            lineWidth: 3
+                                        )
+                                )
+                            
+                            // Progress view with percentage
+                            VStack(spacing: 5) {
+                                ProgressView(value: loadingProgress, total: 1.0)
+                                    .progressViewStyle(CircularProgressViewStyle(tint: Color.green))
+                                    .scaleEffect(1.5)
+                                
+                                Text("\(Int(loadingProgress * 100))%")
+                                    .font(.headline.bold())
+                                    .foregroundColor(.green)
+                            }
+                        }
+                        
+                        // Loading text
+                        Text("Loading Media...")
+                            .font(.title2.bold())
+                            .foregroundColor(.white)
+                            .shadow(color: Color.green.opacity(0.5), radius: 2)
                     }
+                    .padding(30)
+                    // Add a subtle animation
+                    .scaleEffect(1.0)
+                    .animation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: UUID())
+            
                 } else if currentIndex >= mediaItems.count {
                     VStack {
                         Text("All Done! :)")
@@ -140,6 +188,16 @@ struct FilteredSwipeStack: View {
         .onAppear(perform: initializeAudioSession)
         .onAppear(perform: fetchFilteredMedia)
         .navigationBarHidden(true)
+    }
+    
+    // Function to go back to the previous media
+    private func goBack() {
+        if currentIndex > 0 {
+            currentIndex -= 1
+            updateMediaSize()
+            preloadContentForCurrentIndex()
+            pauseNonFocusedVideos()
+        }
     }
     
     // Helper methods for accessing cached content

@@ -17,6 +17,10 @@ struct NavStackedBlocksView: View {
     // Add loading states
     @State private var isFoldersLoading = false
     @State private var isYearsLoading = false
+    
+    // Add state to track whether assets are ready
+    @State private var areFolderAssetsReady = false
+    @State private var areYearAssetsReady = false
 
     var body: some View {
         NavigationView {
@@ -34,10 +38,32 @@ struct NavStackedBlocksView: View {
             destinationView(for: item.value)
         }
         .fullScreenCover(isPresented: $isFolderSelected) {
-            FilteredSwipeStack(filterOptions: createFolderFilterOptions())
+            // Reset states on dismissal
+            self.areFolderAssetsReady = false
+        } content: {
+            // Only show FilteredSwipeStack if assets are ready
+            if areFolderAssetsReady {
+                FilteredSwipeStack(filterOptions: createFolderFilterOptions())
+            } else {
+                LoadingView(message: "Loading folder media...") {
+                    // Dismiss action for loading view
+                    isFolderSelected = false
+                }
+            }
         }
         .fullScreenCover(isPresented: $isYearSelected) {
-            FilteredSwipeStack(filterOptions: createYearFilterOptions())
+            // Reset states on dismissal
+            self.areYearAssetsReady = false
+        } content: {
+            // Only show FilteredSwipeStack if assets are ready
+            if areYearAssetsReady {
+                FilteredSwipeStack(filterOptions: createYearFilterOptions())
+            } else {
+                LoadingView(message: "Loading year media...") {
+                    // Dismiss action for loading view
+                    isYearSelected = false
+                }
+            }
         }
     }
 
@@ -182,12 +208,89 @@ struct NavStackedBlocksView: View {
     }
 }
 
+// Add a simple loading view
+struct LoadingView: View {
+    var message: String
+    var onCancel: () -> Void
+    
+    var body: some View {
+        ZStack {
+            // Black background
+            Color.black.edgesIgnoringSafeArea(.all)
+            
+            VStack(spacing: 25) {
+                // Green glowing circle with spinner
+                ZStack {
+                    // Outer glow effect
+                    Circle()
+                        .fill(Color.green.opacity(0.2))
+                        .frame(width: 120, height: 120)
+                        .blur(radius: 10)
+                    
+                    // Inner circle
+                    Circle()
+                        .fill(Color.black)
+                        .frame(width: 100, height: 100)
+                        .overlay(
+                            Circle()
+                                .stroke(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color.green.opacity(0.8), Color.green.opacity(0.4)]),
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 3
+                                )
+                        )
+                    
+                    // Progress spinner
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .progressViewStyle(CircularProgressViewStyle(tint: Color.green))
+                }
+                
+                // Loading message
+                Text(message)
+                    .font(.title2.bold())
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+                
+                // Cancel button
+                Button(action: onCancel) {
+                    Text("Cancel")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 30)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color.green.opacity(0.7), Color.blue.opacity(0.7)]),
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                        )
+                        .shadow(color: Color.green.opacity(0.5), radius: 5, x: 0, y: 2)
+                }
+                .padding(.top, 10)
+            }
+            .padding(30)
+            // Add a subtle animation
+            .scaleEffect(1.0)
+            .animation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: UUID())
+        }
+    }
+}
+
 extension NavStackedBlocksView {
     /// **Fetch photos for the selected folder**
     private func fetchAssets(for collection: PHAssetCollection) {
-        // Show activity indicator while loading
-        let tempIsFolderSelected = isFolderSelected
-        isFolderSelected = false // Reset to prevent showing old data
+        // First show the loading screen
+        areFolderAssetsReady = false
+        isFolderSelected = true
         
         DispatchQueue.global(qos: .userInitiated).async {
             let fetchOptions = PHFetchOptions()
@@ -202,22 +305,25 @@ extension NavStackedBlocksView {
 
             DispatchQueue.main.async {
                 self.selectedFolderAssets = tempAssets
-                self.isFolderSelected = true
+                
+                // Now that assets are loaded, mark them as ready
+                self.areFolderAssetsReady = true
             }
         }
     }
 
-    /// **Fetch photos for the selected year**
+    /// **Fetch photos and videos for the selected year**
     private func fetchAssets(forYear year: String) {
-        // Show activity indicator while loading
-        let tempIsYearSelected = isYearSelected
-        isYearSelected = false // Reset to prevent showing old data
+        // First show the loading screen
+        areYearAssetsReady = false
+        isYearSelected = true
         
         DispatchQueue.global(qos: .userInitiated).async {
             let fetchOptions = PHFetchOptions()
             fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-
-            let assets = PHAsset.fetchAssets(with: .image, options: fetchOptions)
+            
+            // Fetch both images AND videos - this was the root cause of the issue
+            let assets = PHAsset.fetchAssets(with: fetchOptions)
 
             var tempAssets: [PHAsset] = []
             let dateFormatter = DateFormatter()
@@ -234,7 +340,9 @@ extension NavStackedBlocksView {
 
             DispatchQueue.main.async {
                 self.selectedYearAssets = tempAssets
-                self.isYearSelected = true
+                
+                // Now that assets are loaded, mark them as ready
+                self.areYearAssetsReady = true
             }
         }
     }
