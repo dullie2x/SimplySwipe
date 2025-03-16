@@ -23,10 +23,9 @@ class MediaManager {
                 mediaItems.shuffle()
             }
             
-            let paginatedItems = Array(mediaItems.prefix(30))
-            
+            // Return all items, not just the first 30
             DispatchQueue.main.async {
-                completion(paginatedItems, result.count)
+                completion(mediaItems, result.count)
             }
         }
     }
@@ -148,7 +147,7 @@ class MediaManager {
             if let cachedPlayer = players.object(forKey: indexNumber) {
                 if index == currentIndex {
                     cachedPlayer.player.play()
-                    cachedPlayer.player.volume = 1.0
+                    cachedPlayer.player.volume = 0.0
                 } else {
                     cachedPlayer.player.pause()
                     cachedPlayer.player.volume = 0.0

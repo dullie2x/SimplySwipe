@@ -21,7 +21,7 @@ struct TrashView: View {
     
     // MARK: - Main View
     var body: some View {
-        NavigationStack {
+        NavigationView { // Using NavigationView instead of NavigationStack for iOS 15
             ZStack {
                 // Background gradient matching app theme
                 LinearGradient(
@@ -45,12 +45,8 @@ struct TrashView: View {
                 }
             }
             .navigationTitle("Trash")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbarBackground(Color.black, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .primaryAction) {
                     if !swipedMediaManager.trashedMediaAssets.isEmpty {
                         Button(action: toggleSelectionMode) {
                             Text(isSelectionMode ? "Cancel" : "Select")
@@ -70,18 +66,21 @@ struct TrashView: View {
                     onClose: { selectedAssetForFullScreen = nil }
                 )
             }
-            .confirmationDialog("Are you sure you want to delete these items?",
-                             isPresented: $showConfirmationDialog,
-                             titleVisibility: .visible) {
-                Button("Delete", role: .destructive) {
-                    performDelete()
-                }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("These items will be added to your 'Recently Deleted Album'")
+            .actionSheet(isPresented: $showConfirmationDialog) { // Using actionSheet instead of confirmationDialog for iOS 15
+                ActionSheet(
+                    title: Text("Are you sure you want to delete these items?"),
+                    message: Text("These items will be added to your 'Recently Deleted Album'"),
+                    buttons: [
+                        .destructive(Text("Delete"), action: {
+                            performDelete()
+                        }),
+                        .cancel()
+                    ]
+                )
             }
             .disabled(isDeleting || isRecovering)
         }
+        .navigationViewStyle(StackNavigationViewStyle()) // Ensure consistent style across devices
         .preferredColorScheme(.dark)
     }
     
@@ -99,7 +98,13 @@ struct TrashView: View {
                         endPoint: .bottomTrailing
                     )
                 )
-                .symbolEffect(.pulse)
+                // Add a subtle scale animation that works on iOS 15
+                .scaleEffect(1.0)
+                .animation(
+                    Animation.easeInOut(duration: 1.5)
+                        .repeatForever(autoreverses: true),
+                    value: UUID()
+                )
             
             Text("No items in Trash")
                 .font(.title3)

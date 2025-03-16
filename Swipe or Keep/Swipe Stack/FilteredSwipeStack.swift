@@ -150,11 +150,14 @@ struct FilteredSwipeStack: View {
             
                 } else if currentIndex >= mediaItems.count {
                     VStack {
-                        Text("All Done! :)")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .foregroundColor(.green)
-                            .padding()
+                            Image(systemName: "checkmark.circle")
+                                .font(.system(size: 70))
+                                .foregroundColor(.green)
+                            
+                            Text("All Done!")
+                                .font(.largeTitle)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
                     }
                 } else {
                     GeometryReader { geometry in
@@ -360,9 +363,8 @@ struct FilteredSwipeStack: View {
             if let playerItem = playerItem {
                 DispatchQueue.main.async {
                     let player = AVQueuePlayer(playerItem: playerItem)
-                    player.volume = index == self.currentIndex ? 1.0 : 0.0
+                    player.volume = 0.0  // Always start muted
                     let looper = AVPlayerLooper(player: player, templateItem: playerItem)
-                    
                     let cachedPlayer = CachedPlayer(player: player, looper: looper)
                     self.preloadedPlayers.setObject(cachedPlayer, forKey: NSNumber(value: index))
                     
@@ -382,7 +384,7 @@ struct FilteredSwipeStack: View {
             if let cachedPlayer = preloadedPlayers.object(forKey: indexNumber) {
                 if index == currentIndex {
                     cachedPlayer.player.play()
-                    cachedPlayer.player.volume = 1.0
+                    cachedPlayer.player.volume = 0.0
                 } else {
                     cachedPlayer.player.pause()
                     cachedPlayer.player.volume = 0.0

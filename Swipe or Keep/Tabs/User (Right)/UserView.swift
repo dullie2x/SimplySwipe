@@ -9,6 +9,12 @@ struct UserView: View {
     @State private var isFetching = false
     @State private var showPaywall = false
     
+    // State for reset confirmation dialog
+    @State private var showingResetConfirmation = false
+    
+    // Reference to SwipedMediaManager
+    @ObservedObject private var swipedMediaManager = SwipedMediaManager.shared
+    
     // Check if the user has unlimited swipes
     private var isSubscribed: Bool {
         UserDefaults.standard.bool(forKey: "isSubscribed")
@@ -35,6 +41,13 @@ struct UserView: View {
                     statCard(icon: "video", title: "Videos", value: "\(videoCount)")
                     statCard(icon: "hand.tap", title: "Total Swipes", value: "\(swipeCount)")
                     statCard(icon: "arrow.left.arrow.right", title: "Swipes Left", value: swipesLeft, highlight: !isSubscribed)
+                    
+                    // Reset Swiping Progress action card
+                    Button(action: {
+                        showingResetConfirmation = true
+                    }) {
+                        statActionCard(icon: "arrow.counterclockwise", title: "Reset Swiping Progress")
+                    }
                     
                     // Feedback and Rate options as stat cards
                     Button(action: {
@@ -108,11 +121,27 @@ struct UserView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 refreshMediaStats()
             }
+            // Update swipe count from manager
+            swipeCount = swipedMediaManager.swipeCount
         }
         .fullScreenCover(isPresented: $showPaywall) {
             PaywallView()
         }
+        // Add confirmation dialog for resetting progress
+        .confirmationDialog(
+            "Reset Swiping Progress",
+            isPresented: $showingResetConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Reset All Progress", role: .destructive) {
+                resetAllProgress()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This will reset all of your swiping progress. This action cannot be undone.")
+        }
     }
+    
     // Action stat card (for feedback, rate, share)
     private func statActionCard(icon: String, title: String) -> some View {
         HStack {
@@ -200,7 +229,16 @@ struct UserView: View {
             }
         }
     }
+    
+    // Reset all progress function
+    private func resetAllProgress() {
+        swipedMediaManager.resetAllSwipedMedia()
+        // Update the swipe count to reflect the reset
+        swipeCount = 0
+        UserDefaults.standard.set(0, forKey: "swipeCount")
+    }
 }
+
 #Preview {
     UserView()
 }

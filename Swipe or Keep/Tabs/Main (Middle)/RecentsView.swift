@@ -8,20 +8,49 @@ struct RecentsView: View {
     
     var body: some View {
         VStack(spacing: 10) {
-            // Custom Back Button would go here
+            Spacer()
             
             if isLoading {
                 ProgressView("Loading Recents...")
                     .onAppear(perform: checkForRecentAssets)
             } else if !hasRecentMedia {
-                Text("No recent media found.")
-                    .font(.title)
-                    .foregroundColor(.gray)
-                    .multilineTextAlignment(.center)
-                    .padding()
+                VStack(spacing: 24) {
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: 70))
+                        .foregroundColor(.green)
+                    
+                    Text("All Done!")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                    
+                    // Return to Home button
+                    Button(action: {
+                        presentationMode.wrappedValue.dismiss()
+                    }) {
+                        Text("Return to Home")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .padding(.vertical, 12)
+                            .padding(.horizontal, 24)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(LinearGradient(
+                                        gradient: Gradient(colors: [Color.green.opacity(0.7), Color.blue.opacity(0.7)]),
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ))
+                            )
+                            .shadow(color: Color.green.opacity(0.3), radius: 5, x: 0, y: 2)
+                    }
+                    .padding(.top, 20)
+                }
+                .padding(32)
             } else {
                 FilteredSwipeStack(filterOptions: getRecentFilterOptions())
             }
+            
+            Spacer()
         }
         .background(Color.black.ignoresSafeArea())
         .navigationBarHidden(true)
@@ -47,7 +76,20 @@ struct RecentsView: View {
     private func getRecentFilterOptions() -> PHFetchOptions {
         let fetchOptions = PHFetchOptions()
         let twoDaysAgo = Calendar.current.date(byAdding: .day, value: -2, to: Date()) ?? Date()
-        fetchOptions.predicate = NSPredicate(format: "creationDate >= %@", twoDaysAgo as NSDate)
+        
+        // Get the swiped media identifiers from SwipedMediaManager
+        let swipedIdentifiers = Array(SwipedMediaManager.shared.getSwipedMediaIdentifiers())
+        
+        // Create the appropriate predicate based on whether we have swiped assets
+        if swipedIdentifiers.isEmpty {
+            // If no swiped media yet, just filter by recent date
+            fetchOptions.predicate = NSPredicate(format: "creationDate >= %@", twoDaysAgo as NSDate)
+        } else {
+            // Filter by recent date AND exclude already swiped media
+            fetchOptions.predicate = NSPredicate(format: "creationDate >= %@ AND NOT (localIdentifier IN %@)",
+                                              twoDaysAgo as NSDate, swipedIdentifiers)
+        }
+        
         fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         return fetchOptions
     }

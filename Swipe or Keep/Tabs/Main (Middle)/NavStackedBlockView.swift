@@ -2,6 +2,43 @@ import SwiftUI
 import Photos
 import AVKit
 
+struct CircularProgressView: View {
+    var progress: Double
+    var gradient: [Color]
+    
+    var body: some View {
+        ZStack {
+            // Background circle
+            Circle()
+                .stroke(lineWidth: 5)
+                .opacity(0.3)
+                .foregroundColor(Color.white)
+            
+            // Progress circle
+            Circle()
+                .trim(from: 0.0, to: min(CGFloat(progress), 1.0))
+                .stroke(
+                    LinearGradient(
+                        gradient: Gradient(colors: gradient),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round)
+                )
+                .rotationEffect(Angle(degrees: 270.0))
+                .animation(.linear, value: progress)
+            
+            // Progress text
+            if progress > 0 {
+                Text("\(Int(ceil(progress * 100)))%")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white)
+            }
+        }
+        .frame(width: 40, height: 40)
+    }
+}
+
 struct NavStackedBlocksView: View {
     var blockTitles: [String] = ["Recents", "Screenshots", "Favorites", "Years", "Albums"]
 
@@ -21,6 +58,15 @@ struct NavStackedBlocksView: View {
     // Add state to track whether assets are ready
     @State private var areFolderAssetsReady = false
     @State private var areYearAssetsReady = false
+    
+    // Add state variables to track progress
+    @State private var categoryProgress: [Int: Double] = [:]
+    @State private var yearProgress: [String: Double] = [:]
+    @State private var albumProgress: [String: Double] = [:]
+    
+    // Add a progress calculation task to track and cancel background work
+    @State private var progressCalculationTask: Task<Void, Never>? = nil
+    @State private var isCalculatingProgress = false
 
     var body: some View {
         NavigationView {
@@ -32,7 +78,13 @@ struct NavStackedBlocksView: View {
                 .padding(.horizontal, 3)
             }
             .background(Color.black)
-            // Removed heavy operations from onAppear
+            // Calculate progress values when view appears
+            .onAppear {
+                startProgressCalculation()
+            }
+            .refreshable {
+                startProgressCalculation(forceRefresh: true)
+            }
         }
         .fullScreenCover(item: $selectedIndex) { item in
             destinationView(for: item.value)
@@ -40,6 +92,10 @@ struct NavStackedBlocksView: View {
         .fullScreenCover(isPresented: $isFolderSelected) {
             // Reset states on dismissal
             self.areFolderAssetsReady = false
+            // Schedule a deferred progress calculation when returning from folder view
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                startProgressCalculation()
+            }
         } content: {
             // Only show FilteredSwipeStack if assets are ready
             if areFolderAssetsReady {
@@ -54,6 +110,10 @@ struct NavStackedBlocksView: View {
         .fullScreenCover(isPresented: $isYearSelected) {
             // Reset states on dismissal
             self.areYearAssetsReady = false
+            // Schedule a deferred progress calculation when returning from year view
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                startProgressCalculation()
+            }
         } content: {
             // Only show FilteredSwipeStack if assets are ready
             if areYearAssetsReady {
@@ -78,6 +138,21 @@ struct NavStackedBlocksView: View {
                 }
             }
         }
+        .overlay(
+            Group {
+                if isCalculatingProgress {
+                    // Small, unobtrusive loading indicator in the corner
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .frame(width: 20, height: 20)
+                        .padding(8)
+                        .background(Color.black.opacity(0.6))
+                        .cornerRadius(10)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .padding()
+                }
+            }
+        )
     }
 
     /// **Expandable Block for "Years" and "Albums"**
@@ -109,16 +184,16 @@ struct NavStackedBlocksView: View {
     // Load years asynchronously
     private func loadYearsInBackground() {
         isYearsLoading = true
-        DispatchQueue.global(qos: .userInitiated).async {
-            fetchYears()
+        Task {
+            await fetchYears()
         }
     }
     
     // Load folders asynchronously
     private func loadFoldersInBackground() {
         isFoldersLoading = true
-        DispatchQueue.global(qos: .userInitiated).async {
-            fetchFolders()
+        Task {
+            await fetchFolders()
         }
     }
 
@@ -146,6 +221,13 @@ struct NavStackedBlocksView: View {
                         .font(.largeTitle.weight(.bold))
                         .padding(.leading, 15)
                     Spacer()
+                    
+                    // Show progress indicator if progress > 0
+                    if let progress = categoryProgress[index], progress > 0 {
+                        CircularProgressView(progress: progress, gradient: gradientColors(for: index))
+                            .padding(.trailing, showChevron ? 10 : 15)
+                    }
+                    
                     if showChevron {
                         Image(systemName: expandedSections.contains(index) ? "chevron.down" : "chevron.right")
                             .foregroundColor(.white)
@@ -202,6 +284,48 @@ struct NavStackedBlocksView: View {
                             albumBlock(title: folder.localizedTitle ?? "Unknown Album")
                         }
                     }
+                }
+            }
+        }
+    }
+    
+    // Optimized progress calculation method - runs in background
+    private func startProgressCalculation(forceRefresh: Bool = false) {
+        // Cancel any existing calculation
+        progressCalculationTask?.cancel()
+        
+        // If SwipedMediaManager has no swiped media and we're not forcing a refresh, skip the calculation
+        if SwipedMediaManager.shared.swipeCount == 0 && !forceRefresh {
+            // Clear all progress values if no swiped media
+            categoryProgress = [:]
+            yearProgress = [:]
+            albumProgress = [:]
+            return
+        }
+        
+        // Show the loading indicator if there's swiped media
+        if SwipedMediaManager.shared.swipeCount > 0 {
+            isCalculatingProgress = true
+        }
+        
+        // Create a new background task
+        progressCalculationTask = Task {
+            // Check for cancellation
+            if Task.isCancelled { return }
+            
+            // Use ProgressManager to get cached or calculate new progress values
+            let categoryResults = await ProgressManager.shared.getCategoryProgress()
+            let yearResults = await ProgressManager.shared.getYearProgress(for: yearsList)
+            let albumResults = await ProgressManager.shared.getAlbumProgress(for: folders)
+            
+            // Only update the UI if the task hasn't been cancelled
+            if !Task.isCancelled {
+                // Update the UI on the main thread
+                await MainActor.run {
+                    self.categoryProgress = categoryResults
+                    self.yearProgress = yearResults
+                    self.albumProgress = albumResults
+                    self.isCalculatingProgress = false
                 }
             }
         }
@@ -286,61 +410,127 @@ struct LoadingView: View {
 }
 
 extension NavStackedBlocksView {
-    /// **Fetch photos for the selected folder**
+    /// **Fetch photos for the selected folder with pagination**
     private func fetchAssets(for collection: PHAssetCollection) {
         // First show the loading screen
         areFolderAssetsReady = false
         isFolderSelected = true
         
-        DispatchQueue.global(qos: .userInitiated).async {
+        Task {
             let fetchOptions = PHFetchOptions()
             fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-
+            // Remove fetch limit to allow all assets
+            
             let assets = PHAsset.fetchAssets(in: collection, options: fetchOptions)
-
+            
             var tempAssets: [PHAsset] = []
-            assets.enumerateObjects { asset, _, _ in
-                tempAssets.append(asset)
+            tempAssets.reserveCapacity(assets.count) // Pre-allocate memory
+            
+            // Use batched fetching for better performance
+            let totalAssets = assets.count
+            
+            // Skip if no assets to process
+            if totalAssets == 0 {
+                await MainActor.run {
+                    self.selectedFolderAssets = []
+                    self.areFolderAssetsReady = true
+                }
+                return
             }
-
-            DispatchQueue.main.async {
-                self.selectedFolderAssets = tempAssets
+            
+            let batchSize = max(1, min(500, totalAssets)) // Process in batches of 500, ensure at least 1
+            
+            // Use our utility class for batch processing with cancellation check
+            var isCancelled = false
+            for batchStart in stride(from: 0, to: totalAssets, by: batchSize) {
+                if !isFolderSelected {
+                    isCancelled = true
+                    break
+                }
                 
+                autoreleasepool {
+                    let batchEnd = min(batchStart + batchSize, totalAssets)
+                    for i in batchStart..<batchEnd {
+                        let asset = assets.object(at: i)
+                        tempAssets.append(asset)
+                    }
+                }
+            }
+            
+            // If canceled, return early
+            if isCancelled {
+                return
+            }
+            
+            await MainActor.run {
+                self.selectedFolderAssets = tempAssets
                 // Now that assets are loaded, mark them as ready
                 self.areFolderAssetsReady = true
             }
         }
     }
 
-    /// **Fetch photos and videos for the selected year**
+    /// **Fetch photos and videos for the selected year with pagination**
     private func fetchAssets(forYear year: String) {
         // First show the loading screen
         areYearAssetsReady = false
         isYearSelected = true
         
-        DispatchQueue.global(qos: .userInitiated).async {
+        Task {
             let fetchOptions = PHFetchOptions()
             fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+            // Remove fetch limit to allow all assets
             
-            // Fetch both images AND videos - this was the root cause of the issue
+            // Fetch both images AND videos
             let assets = PHAsset.fetchAssets(with: fetchOptions)
-
+            
             var tempAssets: [PHAsset] = []
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "MMM ''yy"
-
-            assets.enumerateObjects { asset, _, _ in
-                if let creationDate = asset.creationDate {
-                    let formattedDate = dateFormatter.string(from: creationDate)
-                    if formattedDate == year {
-                        tempAssets.append(asset)
+            
+            // Use batched fetching for better performance
+            let totalAssets = assets.count
+            
+            // Skip if no assets to process
+            if totalAssets == 0 {
+                await MainActor.run {
+                    self.selectedYearAssets = []
+                    self.areYearAssetsReady = true
+                }
+                return
+            }
+            
+            let batchSize = max(1, min(500, totalAssets)) // Process in batches of 500, ensure at least 1
+            
+            // Use our utility class for batch processing with cancellation check
+            var isCancelled = false
+            for batchStart in stride(from: 0, to: totalAssets, by: batchSize) {
+                if !isYearSelected {
+                    isCancelled = true
+                    break
+                }
+                
+                autoreleasepool {
+                    let batchEnd = min(batchStart + batchSize, totalAssets)
+                    for i in batchStart..<batchEnd {
+                        let asset = assets.object(at: i)
+                        if let creationDate = asset.creationDate {
+                            let formattedDate = dateFormatter.string(from: creationDate)
+                            if formattedDate == year {
+                                tempAssets.append(asset)
+                            }
+                        }
                     }
                 }
             }
-
-            DispatchQueue.main.async {
+            
+            // If canceled, return early
+            if isCancelled {
+                return
+            }
+            
+            await MainActor.run {
                 self.selectedYearAssets = tempAssets
-                
                 // Now that assets are loaded, mark them as ready
                 self.areYearAssetsReady = true
             }
@@ -352,8 +542,18 @@ extension NavStackedBlocksView {
         let fetchOptions = PHFetchOptions()
         fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         
-        // Only fetch assets from the selected folder
-        fetchOptions.predicate = NSPredicate(format: "SELF IN %@", selectedFolderAssets)
+        // Get the swiped media identifiers from SwipedMediaManager
+        let swipedIdentifiers = Array(SwipedMediaManager.shared.getSwipedMediaIdentifiers())
+        
+        if swipedIdentifiers.isEmpty {
+            // If no swiped media yet, just filter by the selected folder
+            fetchOptions.predicate = NSPredicate(format: "SELF IN %@", selectedFolderAssets)
+        } else {
+            // Filter by the selected folder AND exclude already swiped media
+            fetchOptions.predicate = NSPredicate(format: "SELF IN %@ AND NOT (localIdentifier IN %@)",
+                                               selectedFolderAssets, swipedIdentifiers)
+        }
+        
         return fetchOptions
     }
 
@@ -362,8 +562,18 @@ extension NavStackedBlocksView {
         let fetchOptions = PHFetchOptions()
         fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         
-        // Only fetch assets from the selected year
-        fetchOptions.predicate = NSPredicate(format: "SELF IN %@", selectedYearAssets)
+        // Get the swiped media identifiers from SwipedMediaManager
+        let swipedIdentifiers = Array(SwipedMediaManager.shared.getSwipedMediaIdentifiers())
+        
+        if swipedIdentifiers.isEmpty {
+            // If no swiped media yet, just filter by the selected year
+            fetchOptions.predicate = NSPredicate(format: "SELF IN %@", selectedYearAssets)
+        } else {
+            // Filter by the selected year AND exclude already swiped media
+            fetchOptions.predicate = NSPredicate(format: "SELF IN %@ AND NOT (localIdentifier IN %@)",
+                                               selectedYearAssets, swipedIdentifiers)
+        }
+        
         return fetchOptions
     }
 
@@ -384,6 +594,12 @@ extension NavStackedBlocksView {
                         .font(.largeTitle.weight(.bold))
                         .padding(.leading, 15)
                     Spacer()
+                    
+                    // Show progress indicator if progress > 0
+                    if let progress = yearProgress[title], progress > 0 {
+                        CircularProgressView(progress: progress, gradient: [Color.red.opacity(0.7), Color.pink.opacity(0.7)])
+                            .padding(.trailing, 15)
+                    }
                 }
             )
             .padding(.top, 2)
@@ -406,6 +622,12 @@ extension NavStackedBlocksView {
                         .font(.largeTitle.weight(.bold))
                         .padding(.leading, 15)
                     Spacer()
+                    
+                    // Show progress indicator if progress > 0
+                    if let progress = albumProgress[title], progress > 0 {
+                        CircularProgressView(progress: progress, gradient: [Color.orange.opacity(0.7), Color.yellow.opacity(0.7)])
+                            .padding(.trailing, 15)
+                    }
                 }
             )
             .padding(.top, 2)
@@ -438,41 +660,45 @@ extension NavStackedBlocksView {
     }
 
     /// **Fetch Available Folders (Sorted by Creation Date)**
-    private func fetchFolders() {
-        PHPhotoLibrary.requestAuthorization { status in
-            guard status == .authorized else {
-                print("Photo access denied")
-                DispatchQueue.main.async {
-                    self.isFoldersLoading = false
-                }
-                return
-            }
-
-            let allFolders = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil)
-            var tempFolders: [PHAssetCollection] = []
-
-            // Use autoreleasepool to prevent memory pressure during enumeration
-            autoreleasepool {
-                allFolders.enumerateObjects { collection, _, _ in
-                    if PHAsset.fetchAssets(in: collection, options: nil).count > 0 {
-                        tempFolders.append(collection)
-                    }
-                }
-            }
-
-            DispatchQueue.main.async {
-                self.folders = tempFolders
+    private func fetchFolders() async {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        guard status == .authorized else {
+            print("Photo access denied")
+            await MainActor.run {
                 self.isFoldersLoading = false
             }
+            return
+        }
+
+        let allFolders = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil)
+        var tempFolders: [PHAssetCollection] = []
+        tempFolders.reserveCapacity(allFolders.count) // Pre-allocate capacity
+
+        // Use autoreleasepool to prevent memory pressure during enumeration
+        for i in 0..<allFolders.count {
+            autoreleasepool {
+                let collection = allFolders.object(at: i)
+                if PHAsset.fetchAssets(in: collection, options: nil).count > 0 {
+                    tempFolders.append(collection)
+                }
+            }
+        }
+
+        await MainActor.run {
+            self.folders = tempFolders
+            self.isFoldersLoading = false
+            
+            // After loading folders, update their progress in the background
+            startProgressCalculation()
         }
     }
 
     /// **Fetch Available Years from Photos (Sorted & Unique)**
-    private func fetchYears() {
+    private func fetchYears() async {
         let fetchOptions = PHFetchOptions()
         fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
 
-        let assets = PHAsset.fetchAssets(with: .image, options: fetchOptions)
+        let assets = PHAsset.fetchAssets(with: fetchOptions)
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "MMM ''yy" // Formats like "Jan '25"
@@ -480,20 +706,31 @@ extension NavStackedBlocksView {
         var uniqueDates: Set<String> = [] // Prevents duplicate months
         var sortedDates: [(year: Int, month: Int, formatted: String)] = []
 
-        // Use autoreleasepool to prevent memory pressure
-        autoreleasepool {
-            assets.enumerateObjects { asset, _, _ in
-                if let creationDate = asset.creationDate {
-                    let formattedDate = dateFormatter.string(from: creationDate)
+        // Process in batches to improve performance
+        let totalAssets = assets.count
+        
+        // Skip if no assets to process
+        if totalAssets == 0 {
+            await MainActor.run {
+                self.yearsList = []
+                self.isYearsLoading = false
+            }
+            return
+        }
+        
+        let batchSize = max(1, min(500, totalAssets)) // Process in batches of 500, ensure at least 1
+        
+        PHAssetBatchProcessor.processBatched(fetchResult: assets, batchSize: batchSize) { asset in
+            if let creationDate = asset.creationDate {
+                let formattedDate = dateFormatter.string(from: creationDate)
 
-                    let calendar = Calendar.current
-                    let components = calendar.dateComponents([.year, .month], from: creationDate)
+                let calendar = Calendar.current
+                let components = calendar.dateComponents([.year, .month], from: creationDate)
 
-                    if let year = components.year, let month = components.month {
-                        if !uniqueDates.contains(formattedDate) { // Avoid duplicate months
-                            uniqueDates.insert(formattedDate)
-                            sortedDates.append((year, month, formattedDate))
-                        }
+                if let year = components.year, let month = components.month {
+                    if !uniqueDates.contains(formattedDate) { // Avoid duplicate months
+                        uniqueDates.insert(formattedDate)
+                        sortedDates.append((year, month, formattedDate))
                     }
                 }
             }
@@ -507,9 +744,12 @@ extension NavStackedBlocksView {
             return $0.year > $1.year
         }
 
-        DispatchQueue.main.async {
+        await MainActor.run {
             self.yearsList = sortedDates.map { $0.formatted }
             self.isYearsLoading = false
+            
+            // After loading years, update their progress
+            startProgressCalculation()
         }
     }
 }
@@ -519,3 +759,4 @@ struct IdentifiableInt: Identifiable {
     let id = UUID()
     let value: Int
 }
+
