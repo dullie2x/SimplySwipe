@@ -18,8 +18,7 @@ struct SplashView: View {
                 VStack(spacing: 20) {
                     // "Simply" above the logo
                     Text("Simply")
-                        .font(.system(size: 50, weight: .bold)) // Bigger text
-                        .foregroundColor(.white)
+                        .font(.system(size: 70, weight: .heavy, design: .rounded))                        .foregroundColor(.white)
                         .offset(x: simplyOffset)
                     
                     // App Logo in the middle
@@ -32,8 +31,7 @@ struct SplashView: View {
                     
                     // "Swipe" below the logo with BIGGER FONT
                     Text("Swipe")
-                        .font(.system(size: 50, weight: .bold)) // Bigger text
-                        .foregroundColor(.white)
+                        .font(.system(size: 70, weight: .heavy, design: .rounded))                        .foregroundColor(.white)
                         .offset(x: swipeOffset)
                 }
             }

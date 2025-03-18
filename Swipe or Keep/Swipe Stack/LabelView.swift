@@ -16,7 +16,7 @@ struct LabelView: View {
                     .foregroundColor(.white)
 
                 Text(text)
-                    .font(.title)
+                    .font(.system(.title, design: .rounded))
                     .bold()
                     .foregroundColor(.white)
             }

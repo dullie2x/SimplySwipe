@@ -500,7 +500,7 @@ struct SwipeStack: View {
     
     func updateMediaSize() {
         guard currentIndex < paginatedMediaItems.count else { return }
-        let asset = paginatedMediaItems[currentIndex]
+        _ = paginatedMediaItems[currentIndex]
         
         // Use MediaManager to get size or implement directly
         mediaSize = MediaManager.shared.updateMediaSize(for: paginatedMediaItems, index: currentIndex)

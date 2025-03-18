@@ -49,11 +49,16 @@ actor ProgressManager {
                 continue
             }
             
-            // Calculate progress in the background
+            // Calculate progress using MainActor to access shared property
             let progress = await withCheckedContinuation { continuation in
                 calculationQueue.async {
-                    let result = SwipedMediaManager.shared.calculateProgress(forCategory: category)
-                    continuation.resume(returning: result)
+                    // Use Task to hop to the main actor
+                    Task {
+                        let result = await MainActor.run {
+                            SwipedMediaManager.shared.calculateProgress(forCategory: category)
+                        }
+                        continuation.resume(returning: result)
+                    }
                 }
             }
             
@@ -89,8 +94,13 @@ actor ProgressManager {
                 group.addTask {
                     let progress = await withCheckedContinuation { continuation in
                         DispatchQueue.global(qos: .userInitiated).async {
-                            let result = SwipedMediaManager.shared.calculateProgress(forYear: year)
-                            continuation.resume(returning: result)
+                            // Use Task to hop to MainActor to access shared property
+                            Task {
+                                let result = await MainActor.run {
+                                    SwipedMediaManager.shared.calculateProgress(forYear: year)
+                                }
+                                continuation.resume(returning: result)
+                            }
                         }
                     }
                     return (year, progress)
@@ -133,8 +143,13 @@ actor ProgressManager {
                 group.addTask {
                     let progress = await withCheckedContinuation { continuation in
                         DispatchQueue.global(qos: .userInitiated).async {
-                            let result = SwipedMediaManager.shared.calculateProgress(for: folder)
-                            continuation.resume(returning: result)
+                            // Create a Task to hop to the main actor when accessing SwipedMediaManager.shared
+                            Task {
+                                let result = await MainActor.run {
+                                    SwipedMediaManager.shared.calculateProgress(for: folder)
+                                }
+                                continuation.resume(returning: result)
+                            }
                         }
                     }
                     return (title, progress)

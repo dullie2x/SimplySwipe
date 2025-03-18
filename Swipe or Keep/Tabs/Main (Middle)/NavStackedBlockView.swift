@@ -218,7 +218,7 @@ struct NavStackedBlocksView: View {
                 HStack {
                     Text(blockTitles[index])
                         .foregroundColor(.white)
-                        .font(.largeTitle.weight(.bold))
+                        .font(.system(size: 30, weight: .heavy, design: .rounded))
                         .padding(.leading, 15)
                     Spacer()
                     
@@ -591,7 +591,7 @@ extension NavStackedBlocksView {
                 HStack {
                     Text(title)
                         .foregroundColor(.white)
-                        .font(.largeTitle.weight(.bold))
+                        .font(.system(size: 30, weight: .heavy, design: .rounded))
                         .padding(.leading, 15)
                     Spacer()
                     
@@ -619,7 +619,7 @@ extension NavStackedBlocksView {
                 HStack {
                     Text(title)
                         .foregroundColor(.white)
-                        .font(.largeTitle.weight(.bold))
+                        .font(.system(size: 30, weight: .heavy, design: .rounded))
                         .padding(.leading, 15)
                     Spacer()
                     

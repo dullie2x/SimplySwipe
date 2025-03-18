@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct PaywallView: View {
+struct PaywallMaxView: View {
     @Environment(\.dismiss) var dismiss
     @State private var animate = false
     @State private var showAdView = false // Controls AdView presentation
@@ -9,7 +9,7 @@ struct PaywallView: View {
         ZStack {
             // Background gradient
             LinearGradient(
-                gradient: Gradient(colors: [Color.green.opacity(0.7), Color.blue.opacity(0.7)]),
+                gradient: Gradient(colors: [Color.red.opacity(0.7), Color.orange.opacity(0.7)]),
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -34,12 +34,12 @@ struct PaywallView: View {
                 
                 // Title & Subtitle
                 VStack(spacing: 10) {
-                    Text("Unlock Unlimited Swipes")
-                        .font(.system(size: 30, weight: .heavy, design: .rounded))
+                    Text("You're Out of Free Swipes!")
+                        .font(.system(size: 30, weight: .bold))
                         .foregroundColor(.white)
                         .shadow(radius: 5)
                     
-                    Text("Upgrade or watch an ad for 10 more.")
+                    Text("Choose an option below:")
                         .font(.system(size: 18, weight: .medium))
                         .foregroundColor(.white.opacity(0.8))
                         .multilineTextAlignment(.center)
@@ -48,10 +48,27 @@ struct PaywallView: View {
                 }
                 .padding(.top, -20)
 
-                // **Watch Ad for More Swipes**
+                // **Option 1: Wait for Free Swipes**
                 VStack(spacing: 10) {
                     Button(action: {
-                        showAdView = true // Show AdView without dismissing PaywallView
+                        dismiss() // Just closes the paywall and lets them wait
+                    }) {
+                        Text("Wait Until Tomorrow for Free Swipes")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.gray.opacity(0.7))
+                            .cornerRadius(12)
+                            .shadow(radius: 5)
+                    }
+                }
+                .padding(.horizontal, 20)
+
+                // **Option 2: Watch Ad for 10 More Swipes**
+                VStack(spacing: 10) {
+                    Button(action: {
+                        showAdView = true // Show AdView without dismissing PaywallMaxView
                     }) {
                         HStack {
                             Image(systemName: "play.rectangle.fill")
@@ -70,7 +87,7 @@ struct PaywallView: View {
                 }
                 .padding(.horizontal, 20)
 
-                // **Pricing Options**
+                // **Option 3: Upgrade for Unlimited Swipes**
                 VStack(spacing: 15) {
                     PaywallOption(title: "Unlimited Swipes - Monthly", price: "$2.99 / Month", highlight: false, animate: $animate) {
                         // Purchase logic for Monthly Plan
@@ -112,58 +129,8 @@ struct PaywallView: View {
     }
 }
 
-
-
-
-// Unified Paywall Option Button
-struct PaywallOption: View {
-    let title: String
-    let price: String
-    let highlight: Bool
-    @Binding var animate: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack {
-                VStack(alignment: .leading) {
-                    Text(title)
-                        .font(.system(size: highlight ? 16 : 18, weight: .bold))
-                        .foregroundColor(highlight ? .black : .white)
-                    
-                    Text(price)
-                        .font(.system(size: 18, weight: highlight ? .bold : .regular))
-                        .foregroundColor(highlight ? .red : .white.opacity(0.8))
-                }
-                Spacer()
-                
-                if highlight {
-                    Text("🔥 Save 58%")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Color.red.opacity(0.8))
-                        .cornerRadius(8)
-                        .scaleEffect(animate ? 1.05 : 1.0)
-                        .animation(.easeInOut(duration: 1).repeatForever(), value: animate)
-                }
-            }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(highlight ? Color.yellow.opacity(0.9) : Color.white.opacity(0.1))
-                    .shadow(color: highlight ? Color.yellow.opacity(0.5) : Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
-            )
-            .scaleEffect(animate ? 1.05 : 1.0)
-            .animation(.easeInOut(duration: 0.7), value: animate)
-        }
-        .padding(.vertical, highlight ? 5 : 0)
-    }
-}
-
-struct PaywallView_Previews: PreviewProvider {
+struct PaywallMaxView_Previews: PreviewProvider {
     static var previews: some View {
-        PaywallView()
+        PaywallMaxView()
     }
 }

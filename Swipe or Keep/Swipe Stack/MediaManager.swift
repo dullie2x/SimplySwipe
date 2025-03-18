@@ -14,21 +14,21 @@ class MediaManager {
             fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
             let result = PHAsset.fetchAssets(with: fetchOptions)
             
-            // Use autoreleasepool to prevent memory buildup during large collection processing
-            var mediaItems: [PHAsset] = []
+            // Use autoreleasepool for memory management
+            var allItems: [PHAsset] = []
             autoreleasepool {
-                // Create a filtered list of non-swiped items
-                let allItems = result.objects(at: IndexSet(integersIn: 0..<result.count))
-                mediaItems = allItems.filter { !SwipedMediaManager.shared.isMediaSwiped($0) }
-                mediaItems.shuffle()
+                allItems = result.objects(at: IndexSet(integersIn: 0..<result.count))
             }
             
-            // Return all items, not just the first 30
+            // Move only the filtering & shuffling to the main thread
             DispatchQueue.main.async {
-                completion(mediaItems, result.count)
+                let mediaItems = allItems.filter { !SwipedMediaManager.shared.isMediaSwiped($0) }
+                let shuffledMedia = mediaItems.shuffled()
+                completion(shuffledMedia, result.count)
             }
         }
     }
+
     
     func updateMediaSize(for media: [PHAsset], index: Int) -> String {
         guard index < media.count else { return "0 MB" }

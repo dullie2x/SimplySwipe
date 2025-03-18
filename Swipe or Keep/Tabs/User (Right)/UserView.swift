@@ -23,24 +23,24 @@ struct UserView: View {
     private var swipesLeft: String {
         isSubscribed ? "Unlimited" : "\(max(75 - swipeCount, 0))"
     }
-
+    
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
                 // Header
-                Text("User Profile")
-                     .font(.system(size: 32, weight: .bold))
-                     .foregroundColor(.white)
-                     .frame(maxWidth: .infinity, alignment: .center)
-                     .padding(.top, 30)
-                     .padding(.bottom, 20)
+                Text("User Stats")
+                    .font(.system(size: 38, weight: .heavy, design: .rounded))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 30)
+                    .padding(.bottom, 20)
                 
                 // Stats Section with feedback options integrated
                 VStack(spacing: 15) {
                     statCard(icon: "photo", title: "Photos", value: "\(photoCount)")
                     statCard(icon: "video", title: "Videos", value: "\(videoCount)")
                     statCard(icon: "hand.tap", title: "Total Swipes", value: "\(swipeCount)")
-                    statCard(icon: "arrow.left.arrow.right", title: "Swipes Left", value: swipesLeft, highlight: !isSubscribed)
+                    statCard(icon: "arrow.left.arrow.right", title: "Swipes Remaining", value: swipesLeft, highlight: !isSubscribed)
                     
                     // Reset Swiping Progress action card
                     Button(action: {
@@ -68,16 +68,14 @@ struct UserView: View {
                 if !isSubscribed {
                     VStack(spacing: 15) {
                         Text("Want unlimited swipes?")
-                            .font(.headline)
-                            .foregroundColor(.white)
+                            .font(.system(size: 18, weight: .bold, design: .rounded))                            .foregroundColor(.white)
                         
                         Button(action: { showPaywall.toggle() }) {
                             HStack {
                                 Image(systemName: "star.fill")
                                     .foregroundColor(.black)
                                 Text("Upgrade Now")
-                                    .font(.headline)
-                                    .foregroundColor(.black)
+                                    .font(.system(size: 18, weight: .bold, design: .rounded))                                    .foregroundColor(.black)
                             }
                             .frame(maxWidth: .infinity)
                             .padding()
@@ -151,7 +149,7 @@ struct UserView: View {
                 .frame(width: 40)
             
             Text(title)
-                .font(.system(size: 18, weight: .medium))
+                .font(.system(size: 18, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
             
             Spacer()
@@ -167,7 +165,7 @@ struct UserView: View {
         )
         .padding(.horizontal, 16)
     }
-
+    
     /// Stylized stat card with icon
     private func statCard(icon: String, title: String, value: String, highlight: Bool = false) -> some View {
         HStack {
@@ -177,7 +175,7 @@ struct UserView: View {
                 .frame(width: 40)
             
             Text(title)
-                .font(.system(size: 18, weight: .medium))
+                .font(.system(size: 18, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
             
             Spacer()

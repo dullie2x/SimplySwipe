@@ -72,10 +72,10 @@ struct RecentsView: View {
         }
     }
     
-    /// Generate a PHFetchOptions instance for the last 48 hours
+    /// Generate a PHFetchOptions instance for the last 7 days
     private func getRecentFilterOptions() -> PHFetchOptions {
         let fetchOptions = PHFetchOptions()
-        let twoDaysAgo = Calendar.current.date(byAdding: .day, value: -2, to: Date()) ?? Date()
+        let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
         
         // Get the swiped media identifiers from SwipedMediaManager
         let swipedIdentifiers = Array(SwipedMediaManager.shared.getSwipedMediaIdentifiers())
@@ -83,11 +83,11 @@ struct RecentsView: View {
         // Create the appropriate predicate based on whether we have swiped assets
         if swipedIdentifiers.isEmpty {
             // If no swiped media yet, just filter by recent date
-            fetchOptions.predicate = NSPredicate(format: "creationDate >= %@", twoDaysAgo as NSDate)
+            fetchOptions.predicate = NSPredicate(format: "creationDate >= %@", sevenDaysAgo as NSDate)
         } else {
             // Filter by recent date AND exclude already swiped media
             fetchOptions.predicate = NSPredicate(format: "creationDate >= %@ AND NOT (localIdentifier IN %@)",
-                                              twoDaysAgo as NSDate, swipedIdentifiers)
+                                              sevenDaysAgo as NSDate, swipedIdentifiers)
         }
         
         fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]

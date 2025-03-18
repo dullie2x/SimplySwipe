@@ -50,8 +50,7 @@ struct TrashView: View {
                     if !swipedMediaManager.trashedMediaAssets.isEmpty {
                         Button(action: toggleSelectionMode) {
                             Text(isSelectionMode ? "Cancel" : "Select")
-                                .fontWeight(.medium)
-                        }
+                            .font(.system(size: 20, weight: .bold, design: .rounded))                        }
                         .buttonStyle(.plain)
                         .foregroundColor(.white)
                         .disabled(isDeleting || isRecovering)
@@ -312,12 +311,19 @@ struct TrashView: View {
         
         isRecovering = true
         
-        DispatchQueue.global(qos: .userInitiated).async {
-            swipedMediaManager.recoverItems(with: selectedItems)
+        // Capture selectedItems to use in background
+        let itemsToRecover = selectedItems
+        
+        Task {
+            // Call the actor-isolated method properly
+            await MainActor.run {
+                swipedMediaManager.recoverItems(with: itemsToRecover)
+            }
             
-            DispatchQueue.main.async {
+            // Update UI on the main thread
+            await MainActor.run {
                 withAnimation {
-                    let count = selectedItems.count
+                    let count = itemsToRecover.count
                     selectedItems.removeAll()
                     isRecovering = false
                     isSelectionMode = false

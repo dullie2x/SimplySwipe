@@ -7,10 +7,10 @@ class SwipedMediaManager: NSObject, ObservableObject {
     
     private let swipedKey = "swipedMedia"
     private let trashKey = "trashedItems"
-
+    
     private var swipedMedia: Set<String> = []
     private var trashedItems: Set<String> = []
-
+    
     @Published var trashedMediaAssets: [PHAsset] = []
     @Published var swipeCount: Int = 0
     
@@ -39,7 +39,7 @@ class SwipedMediaManager: NSObject, ObservableObject {
     // Add a set to track pending updates
     private var pendingProgressUpdates = Set<String>()
     private var progressUpdateTimer: Timer?
-
+    
     // Media category enum
     enum MediaCategory {
         case recents
@@ -72,7 +72,7 @@ class SwipedMediaManager: NSObject, ObservableObject {
             assetLookupCache[identifier] = true
         }
     }
-
+    
     func addSwipedMedia(_ asset: PHAsset, toTrash: Bool = false) {
         let identifier = asset.localIdentifier
         if toTrash {
@@ -99,8 +99,11 @@ class SwipedMediaManager: NSObject, ObservableObject {
     private func scheduleTrashedMediaUpdate() {
         if progressUpdateTimer == nil {
             progressUpdateTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { [weak self] _ in
-                self?.updateTrashedMediaAssets()
-                self?.progressUpdateTimer = nil
+                // Ensure we're on the main actor when calling actor-isolated methods
+                Task { @MainActor [weak self] in
+                    self?.updateTrashedMediaAssets()
+                    self?.progressUpdateTimer = nil
+                }
             }
         }
     }
@@ -126,31 +129,31 @@ class SwipedMediaManager: NSObject, ObservableObject {
             await ProgressManager.shared.invalidateCache()
         }
     }
-
+    
     func recoverItems(with identifiers: Set<String>) {
         trashedItems.subtract(identifiers)
         
         // Update the lookup cache
-        for identifier in identifiers {
+        for _ in identifiers {
             // Don't change the swiped status
         }
         
         saveTrashedItems()
         updateTrashedMediaAssets()
     }
-
+    
     func deleteItems(with identifiers: Set<String>) {
         trashedItems.subtract(identifiers)
         
         // Update the lookup cache
-        for identifier in identifiers {
+        for _ in identifiers {
             // Don't change the swiped status
         }
         
         saveTrashedItems()
         updateTrashedMediaAssets()
     }
-
+    
     func isMediaSwiped(_ asset: PHAsset) -> Bool {
         // Use the lookup cache for faster checking
         if let isSwiped = assetLookupCache[asset.localIdentifier] {
@@ -267,7 +270,7 @@ class SwipedMediaManager: NSObject, ObservableObject {
         var yearEndDate: Date?
         
         // Try to parse the year format to get a date range
-        if let currentYear = Calendar.current.dateComponents([.year], from: Date()).year {
+        if Calendar.current.dateComponents([.year], from: Date()).year != nil {
             // For formats like "Jan '25", extract the year and month
             let components = year.components(separatedBy: " ")
             if components.count == 2 {
@@ -352,7 +355,7 @@ class SwipedMediaManager: NSObject, ObservableObject {
         
         return progress
     }
-
+    
     
     // Calculate progress for standard categories
     func calculateProgress(forCategory category: MediaCategory) -> Double {
@@ -420,26 +423,26 @@ class SwipedMediaManager: NSObject, ObservableObject {
         
         return progress
     }
-
+    
     private func saveSwipedMedia() {
         UserDefaults.standard.set(Array(swipedMedia), forKey: swipedKey)
     }
-
+    
     private func loadSwipedMedia() {
         swipedMedia = Set(UserDefaults.standard.stringArray(forKey: swipedKey) ?? [])
         // Update the lookup cache after loading
         updateAssetLookupCache()
     }
-
+    
     private func saveTrashedItems() {
         UserDefaults.standard.set(Array(trashedItems), forKey: trashKey)
     }
-
+    
     private func loadTrashedItems() {
         trashedItems = Set(UserDefaults.standard.stringArray(forKey: trashKey) ?? [])
         updateTrashedMediaAssets()
     }
-
+    
     private func updateTrashedMediaAssets() {
         // Skip updating if there are no trashed items
         guard !trashedItems.isEmpty else {
@@ -447,10 +450,13 @@ class SwipedMediaManager: NSObject, ObservableObject {
             return
         }
         
+        // Capture the trashed items on the main thread before going to background
+        let itemsToCheck = Array(trashedItems)
+        
         // Use fetchQueue to avoid blocking the main thread
         fetchQueue.async {
             let fetchOptions = PHFetchOptions()
-            fetchOptions.predicate = NSPredicate(format: "localIdentifier IN %@", Array(self.trashedItems))
+            fetchOptions.predicate = NSPredicate(format: "localIdentifier IN %@", itemsToCheck)
             let fetchedAssets = PHAsset.fetchAssets(with: fetchOptions)
             
             // Process in batches to avoid creating large arrays
@@ -472,7 +478,9 @@ class SwipedMediaManager: NSObject, ObservableObject {
                 return
             }
             
-            let batchSize = max(1, min(self.pageSize, totalCount)) // Ensure at least 1 to avoid zero stride
+            // Use a local copy of pageSize to avoid actor isolation issues
+            let localPageSize = self.pageSize
+            let batchSize = max(1, min(localPageSize, totalCount)) // Ensure at least 1 to avoid zero stride
             
             // Use our utility class for batch processing
             PHAssetBatchProcessor.processBatched(fetchResult: fetchedAssets, batchSize: batchSize) { asset in
@@ -480,8 +488,8 @@ class SwipedMediaManager: NSObject, ObservableObject {
                 existingIdentifiers.insert(asset.localIdentifier)
             }
             
-            // Clean up any identifiers for assets that no longer exist
-            let nonExistentIdentifiers = self.trashedItems.subtracting(existingIdentifiers)
+            // Calculate non-existent identifiers
+            let nonExistentIdentifiers = Set(itemsToCheck).subtracting(existingIdentifiers)
             
             // Update on main thread
             Task { @MainActor in
@@ -499,12 +507,31 @@ class SwipedMediaManager: NSObject, ObservableObject {
 
 // Photo library change observer implementation
 extension SwipedMediaManager: PHPhotoLibraryChangeObserver {
-    func photoLibraryDidChange(_ changeInstance: PHChange) {
+    nonisolated func photoLibraryDidChange(_ changeInstance: PHChange) {
+        // Use a dedicated class to safely transfer data between threads
+        class DataContainer {
+            var assets: [PHAsset] = []
+        }
+        
+        let container = DataContainer()
+        
+        // Use a dispatch queue to hop to the main thread synchronously
+        let semaphore = DispatchSemaphore(value: 0)
+        DispatchQueue.main.async {
+            // Get the assets from the main thread
+            container.assets = self.trashedMediaAssets
+            semaphore.signal()
+        }
+        semaphore.wait()
+        
+        // Get the assets from the container
+        let assetsToCheck = container.assets
+        
         // Check if we need to update our asset list
         var needsUpdate = false
         
         // Check if any of our tracked assets have changed
-        for (index, asset) in trashedMediaAssets.enumerated() {
+        for asset in assetsToCheck {
             if let details = changeInstance.changeDetails(for: asset) {
                 if details.objectWasDeleted {
                     needsUpdate = true
