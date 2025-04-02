@@ -7,7 +7,8 @@
 
 import SwiftUI
 
-// SwipeDirection.swift
 enum SwipeDirection {
-    case left, right
+    case left     // Trash
+    case right    // Keep
+    case skip     // Skip & re-add to stack
 }

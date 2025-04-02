@@ -97,7 +97,7 @@ struct TrashView: View {
                         endPoint: .bottomTrailing
                     )
                 )
-                // Add a subtle scale animation that works on iOS 15
+            // Add a subtle scale animation that works on iOS 15
                 .scaleEffect(1.0)
                 .animation(
                     Animation.easeInOut(duration: 1.5)
@@ -136,18 +136,27 @@ struct TrashView: View {
                             isSelectionMode: isSelectionMode,
                             onTap: {
                                 handleTapOnAsset(asset)
-                            }
+                            },
+                            size: gridItemSize
                         )
                     }
                 }
-                .padding()
-                .animation(.spring(response: 0.3), value: swipedMediaManager.trashedMediaAssets.count)
             }
             .refreshable {
                 // Could implement a refresh action here if needed
                 await refreshTrashContents()
             }
         }
+    }
+    
+    
+    private var gridItemSize: CGFloat {
+        let screenWidth = UIScreen.main.bounds.width
+        let spacing: CGFloat = 8
+        let minItemWidth: CGFloat = 110
+        let numColumns = max(1, Int(screenWidth / (minItemWidth + spacing)))
+        let totalSpacing = CGFloat(numColumns - 1) * spacing
+        return (screenWidth - totalSpacing - 32) / CGFloat(numColumns) // 32 = horizontal padding
     }
     
     // MARK: - Selection Toolbar

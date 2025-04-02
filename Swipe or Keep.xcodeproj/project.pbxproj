@@ -397,7 +397,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Swipe or Keep/Swipe_or_Keep.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_ASSET_PATHS = "\"Swipe or Keep/Preview Content\"";
 				DEVELOPMENT_TEAM = 9YFR4MTQA7;
 				ENABLE_HARDENED_RUNTIME = NO;
@@ -443,7 +443,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Swipe or Keep/Swipe_or_Keep.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_ASSET_PATHS = "\"Swipe or Keep/Preview Content\"";
 				DEVELOPMENT_TEAM = 9YFR4MTQA7;
 				ENABLE_HARDENED_RUNTIME = NO;

@@ -10,6 +10,10 @@ struct FilteredSwipeStack: View {
     @State private var mediaSize: String = "0 MB"
     @State private var isLoading = true
     @State private var loadingProgress: Double = 0.0
+    @State private var previousIndices: [Int] = []
+    @State private var maxGoBackCount = 2
+    @State private var mediaDate: String = ""
+
     
     // Use NSCache instead of Dictionary for better memory management
     private let preloadedPlayers = NSCache<NSNumber, CachedPlayer>()
@@ -76,14 +80,14 @@ struct FilteredSwipeStack: View {
                     
                     Spacer() // Add spacer after size to center it
                     
-                    // Go back button
+                    // Go back button - only enabled if there are previous indices
                     Button(action: goBack) {
                         Image(systemName: "arrow.uturn.left")
                             .font(.system(size: 24, weight: .bold))
-                            .foregroundColor(currentIndex > 0 ? .green : .gray)
+                            .foregroundColor(!previousIndices.isEmpty ? .green : .gray)
                             .padding(8)
                     }
-                    .disabled(currentIndex == 0) // Disable button if at the first item
+                    .disabled(previousIndices.isEmpty) // Disable button if no history
                     
                     Text("\(currentIndex + 1)/\(mediaItems.count)")
                         .font(Font.title2.weight(.heavy))
@@ -136,12 +140,6 @@ struct FilteredSwipeStack: View {
                                     .foregroundColor(.green)
                             }
                         }
-                        
-                        // Loading text
-                        Text("Loading Media...")
-                            .font(.title2.bold())
-                            .foregroundColor(.white)
-                            .shadow(color: Color.green.opacity(0.5), radius: 2)
                     }
                     .padding(30)
                     // Add a subtle animation
@@ -158,6 +156,27 @@ struct FilteredSwipeStack: View {
                                 .font(.largeTitle)
                                 .fontWeight(.bold)
                                 .foregroundColor(.white)
+                        // Return to Home button
+                        Button(action: {
+                            presentationMode.wrappedValue.dismiss()
+                        }) {
+                            Text("Return to Home")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .padding(.vertical, 12)
+                                .padding(.horizontal, 24)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(LinearGradient(
+                                            gradient: Gradient(colors: [Color.green.opacity(0.7), Color.blue.opacity(0.7)]),
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ))
+                                )
+                                .shadow(color: Color.green.opacity(0.3), radius: 5, x: 0, y: 2)
+                        }
+                        .padding(.top, 20)
+                        
                     }
                 } else {
                     GeometryReader { geometry in
@@ -195,8 +214,12 @@ struct FilteredSwipeStack: View {
     
     // Function to go back to the previous media
     private func goBack() {
-        if currentIndex > 0 {
-            currentIndex -= 1
+        if !previousIndices.isEmpty {
+            // Get the most recent index
+            let previousIndex = previousIndices.removeLast()
+            currentIndex = previousIndex
+            
+            // Update UI for the new current index
             updateMediaSize()
             preloadContentForCurrentIndex()
             pauseNonFocusedVideos()
@@ -459,11 +482,29 @@ struct FilteredSwipeStack: View {
         if currentIndex < paginatedMediaItems.count {
             let currentItem = paginatedMediaItems[currentIndex]
             
-            if direction == .left {
+            switch direction {
+            case .left:
                 SwipedMediaManager.shared.addSwipedMedia(currentItem, toTrash: true)
-            } else if direction == .right {
+
+            case .right:
                 SwipedMediaManager.shared.addSwipedMedia(currentItem, toTrash: false)
+
+            case .skip:
+                // Don't trash, just move to next and add back to stack
+                paginatedMediaItems.insert(currentItem, at: currentIndex + 3) // comes back in ~3 cards
             }
+            
+            // Add current index to history before advancing
+            // Only keep track of the last maxGoBackCount indices
+            previousIndices.append(currentIndex)
+            if previousIndices.count > maxGoBackCount {
+                previousIndices.removeFirst()
+            }
+            
+            // Add haptic feedback
+            let feedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
+            feedbackGenerator.prepare() // Prepare the generator for better timing
+            feedbackGenerator.impactOccurred() // Trigger the haptic feedback
         }
         
         withAnimation(.easeInOut(duration: 0.15)) {

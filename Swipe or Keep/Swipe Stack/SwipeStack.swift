@@ -19,9 +19,14 @@ struct SwipeStack: View {
     @State private var mediaItems: [PHAsset] = []
     @State private var paginatedMediaItems: [PHAsset] = []
     @State private var mediaSize: String = "0 MB"
+    @State private var mediaDate: String = "" // Add date property
     @State private var isLoading = true
     @State private var loadingProgress: Double = 0.0
     @State private var swipeCount = UserDefaults.standard.integer(forKey: "swipeCount")
+    
+    // Add previous indices tracking array and maximum go back count
+    @State private var previousIndices: [Int] = []
+    @State private var maxGoBackCount = 2
     
     // Use NSCache for better memory management
     private let preloadedPlayers: NSCache<NSNumber, CachedPlayer>
@@ -59,21 +64,30 @@ struct SwipeStack: View {
                         .padding(8)
                         .onChange(of: currentIndex) { _ in
                             updateMediaSize()
+                            updateMediaDate()
                             preloadContentForCurrentIndex()
                             cleanupOldContent()
                             pauseNonFocusedVideos()
                         }
                     
-                    Spacer() // Push size to left and undo button to right
+                    Spacer() // Push size to left and center the date
+                    
+                    // Date in center with custom format
+                    Text(mediaDate)
+                        .font(Font.title2.weight(.heavy))
+                        .foregroundColor(.green)
+                        .padding(8)
+                    
+                    Spacer() // Center date and push go back to right
                     
                     // Go back button on the right
                     Button(action: goBack) {
                         Image(systemName: "arrow.uturn.left")
                             .font(.system(size: 24, weight: .bold))
-                            .foregroundColor(currentIndex > 0 ? .green : .gray)
+                            .foregroundColor(!previousIndices.isEmpty ? .green : .gray)
                             .padding(8)
                     }
-                    .disabled(currentIndex == 0) // Disable button if at the first item
+                    .disabled(previousIndices.isEmpty) // Disable when no history available
                 } else {
                     Spacer()
                 }
@@ -82,11 +96,12 @@ struct SwipeStack: View {
             .background(Color.black)
             .zIndex(2) // Ensure navbar stays on top
             
-            // Main content
+            // Main content remains the same
             ZStack {
+                // Content remains the same
                 if isLoading {
                     VStack(spacing: 25) {
-                        // Green glowing circle with spinner
+                        // Loading spinner (unchanged)
                         ZStack {
                             // Outer glow effect
                             Circle()
@@ -123,13 +138,12 @@ struct SwipeStack: View {
                         }
                         
                         // Loading text
-                        Text("Loading Media...")
-                            .font(.title2.bold())
-                            .foregroundColor(.white)
-                            .shadow(color: Color.green.opacity(0.5), radius: 2)
+//                        Text("Loading Media...")
+//                            .font(.title2.bold())
+//                            .foregroundColor(.white)
+//                            .shadow(color: Color.green.opacity(0.5), radius: 2)
                     }
                     .padding(30)
-                    // Add a subtle animation
                     .scaleEffect(1.0)
                     .animation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: UUID())
                 } else if mediaItems.isEmpty {
@@ -143,7 +157,6 @@ struct SwipeStack: View {
                 } else {
                     GeometryReader { geometry in
                         ZStack {
-                            // Only render at most 2 cards at a time to reduce memory
                             ForEach(currentIndex..<min(currentIndex + 2, paginatedMediaItems.count), id: \.self) { index in
                                 if index < paginatedMediaItems.count {
                                     MediaCardView(
@@ -171,14 +184,41 @@ struct SwipeStack: View {
         .background(Color.black.ignoresSafeArea())
         .onAppear(perform: initializeAudioSession)
         .onAppear(perform: fetchMedia)
+        .onAppear(perform: updateMediaDate) // Add updateMediaDate
         .navigationBarHidden(true)
     }
     
-    // Function to go back to the previous media
+    // Add function to update media date
+    func updateMediaDate() {
+        guard currentIndex < paginatedMediaItems.count else {
+            mediaDate = ""
+            return
+        }
+        
+        let asset = paginatedMediaItems[currentIndex]
+        
+        // Create date formatter with custom format (month day, year)
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "MMM d, yyyy"
+        
+        // Format creation date
+        if let creationDate = asset.creationDate {
+            mediaDate = dateFormatter.string(from: creationDate)
+        } else {
+            mediaDate = "No date"
+        }
+    }
+    
+    // Modified function to go back to the previous media using history
     private func goBack() {
-        if currentIndex > 0 {
-            currentIndex -= 1
+        if !previousIndices.isEmpty {
+            // Get the most recent index
+            let previousIndex = previousIndices.removeLast()
+            currentIndex = previousIndex
+            
+            // Update UI for the new current index
             updateMediaSize()
+            updateMediaDate() // Add date update when going back
             preloadContentForCurrentIndex()
             pauseNonFocusedVideos()
         }
@@ -224,6 +264,7 @@ struct SwipeStack: View {
                     self.mediaItems = fetchedMedia
                     self.paginatedMediaItems = Array(fetchedMedia.prefix(self.pageSize))
                     self.updateMediaSize()
+                    self.updateMediaDate() // Add date update after media is loaded
                     self.preloadInitialContent()
                 }
             }
@@ -257,6 +298,7 @@ struct SwipeStack: View {
             
             group.notify(queue: .main) {
                 self.isLoading = false
+                self.updateMediaDate() // Update date when content is loaded
                 
                 // Start playing video if the first item is a video
                 if self.currentIndex < self.paginatedMediaItems.count,
@@ -269,6 +311,7 @@ struct SwipeStack: View {
         }
     }
     
+    // Rest of the functions remain the same
     func preloadContentForCurrentIndex() {
         pauseNonFocusedVideos()
         
@@ -321,12 +364,17 @@ struct SwipeStack: View {
         highQualityImageCache.removeAllObjects()
         lowQualityImageCache.removeAllObjects()
         
+        // Reset history when looping back
+        previousIndices = []
+        
         // Reload paginated items and preload content
         paginatedMediaItems = Array(mediaItems.prefix(pageSize))
         updateMediaSize()
+        updateMediaDate() // Add date update when reloading
         preloadContentForCurrentIndex()
     }
     
+    // The rest of the implementation remains unchanged
     func cleanupOldContent() {
         // Only attempt cleanup if we've advanced far enough
         guard currentIndex > 2 else { return }
@@ -459,44 +507,53 @@ struct SwipeStack: View {
         }
     }
     
+    // Modified handleSwipe to track previous indices
     func handleSwipe(direction: SwipeDirection) {
         if currentIndex < paginatedMediaItems.count {
             let currentItem = paginatedMediaItems[currentIndex]
             
-            if direction == .left {
+            switch direction {
+            case .left:
                 SwipedMediaManager.shared.addSwipedMedia(currentItem, toTrash: true)
-            } else if direction == .right {
+
+            case .right:
                 SwipedMediaManager.shared.addSwipedMedia(currentItem, toTrash: false)
+
+            case .skip:
+                // Don't trash, just move to next and add back to stack
+                paginatedMediaItems.insert(currentItem, at: currentIndex + 3) // comes back in ~3 cards
             }
             
-            // Increment swipe count and store
+            previousIndices.append(currentIndex)
+            if previousIndices.count > maxGoBackCount {
+                previousIndices.removeFirst()
+            }
+
             swipeCount += 1
             UserDefaults.standard.set(swipeCount, forKey: "swipeCount")
             
-            // Provide haptic feedback
             let feedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
             feedbackGenerator.impactOccurred()
         }
-        
+
         withAnimation(.easeInOut(duration: 0.15)) {
             offset.width = direction == .left ? -1000 : 1000
         }
-        
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) {
             offset = .zero
             currentIndex += 1
-            
-            // Clean up old items and preload new ones
+
             self.cleanupOldContent()
             self.preloadContentForCurrentIndex()
-            
-            // If we've reached the end of all media items, loop back to start
+
             if self.currentIndex >= self.mediaItems.count && !self.mediaItems.isEmpty {
                 self.currentIndex = 0
                 self.resetAndReload()
             }
         }
     }
+
     
     func updateMediaSize() {
         guard currentIndex < paginatedMediaItems.count else { return }

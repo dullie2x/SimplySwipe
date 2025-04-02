@@ -43,35 +43,27 @@ class ThumbnailCache {
     }
 }
 
-// Updated MediaThumbnailView with theme colors
 struct MediaThumbnailView: View {
     let asset: PHAsset
     let isSelected: Bool
     let isSelectionMode: Bool
     let onTap: () -> Void
+    let size: CGFloat  // Dynamic size passed in
 
     @State private var thumbnail: UIImage?
     @State private var isLoading = false
     @State private var loadFailed = false
-    
-    // Theme colors based on the app's design
-    private let gradientStart = Color(red: 0.2, green: 0.6, blue: 0.3) // Green
-    private let gradientEnd = Color(red: 0.2, green: 0.4, blue: 0.8) // Blue
-    
-    // Scale based on screen scale factor to ensure proper resolution
-    private let targetSize: CGSize = {
+
+    private let gradientStart = Color(red: 0.2, green: 0.6, blue: 0.3)
+    private let gradientEnd = Color(red: 0.2, green: 0.4, blue: 0.8)
+
+    private var targetSize: CGSize {
         let scale = UIScreen.main.scale
-        return CGSize(width: 300 * scale, height: 300 * scale)
-    }()
-    
-    // Dynamic height for thumbnail
-    private var thumbnailHeight: CGFloat {
-        return 130
+        return CGSize(width: size * scale, height: size * scale)
     }
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            // Media thumbnail
             Group {
                 if let thumbnail = thumbnail {
                     Image(uiImage: thumbnail)
@@ -92,19 +84,17 @@ struct MediaThumbnailView: View {
                                 Image(systemName: "exclamationmark.triangle")
                                     .foregroundColor(.yellow)
                                     .font(.system(size: 24))
-                                
                                 Text("Tap to retry")
                                     .font(.caption)
                                     .foregroundColor(.white)
                             }
                         }
-                }
-                else {
+                } else {
                     Rectangle()
                         .fill(Color(UIColor.systemGray6))
                 }
             }
-            .frame(height: thumbnailHeight)
+            .frame(width: size, height: size)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .contentShape(Rectangle())
             .overlay(
@@ -123,13 +113,10 @@ struct MediaThumbnailView: View {
                 }
             )
             .shadow(color: .black.opacity(0.3), radius: 3, x: 0, y: 2)
-            
-            // Media type indicator (video/image)
+
             if asset.mediaType == .video {
                 HStack(spacing: 4) {
-                    Image(systemName: "video.fill")
-                        .font(.caption)
-                    
+                    Image(systemName: "video.fill").font(.caption)
                     Text(timeString(from: asset.duration))
                         .font(.caption)
                         .fontWeight(.medium)
@@ -142,8 +129,7 @@ struct MediaThumbnailView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 .foregroundColor(.white)
             }
-            
-            // Selection checkmark
+
             if isSelectionMode {
                 ZStack {
                     Circle()
@@ -153,7 +139,7 @@ struct MediaThumbnailView: View {
                             Circle()
                                 .strokeBorder(isSelected ? gradientStart : Color.white.opacity(0.7), lineWidth: 2)
                         )
-                    
+
                     if isSelected {
                         Image(systemName: "checkmark")
                             .font(.caption.bold())
@@ -165,7 +151,6 @@ struct MediaThumbnailView: View {
         }
         .onTapGesture {
             if loadFailed {
-                // Retry on tap if failed
                 loadFailed = false
                 loadThumbnail()
             } else {
@@ -181,66 +166,57 @@ struct MediaThumbnailView: View {
     private func loadThumbnail() {
         let cache = ThumbnailCache.shared
         let key = asset.localIdentifier
-        
-        // Check if already being loaded
+
         if cache.isLoading(key: key) {
             return
         }
 
-        // Check if the thumbnail is already cached
         if let cachedImage = cache.getImage(for: key) {
             self.thumbnail = cachedImage
             return
         }
-        
-        // Mark as loading and update UI
+
         cache.setLoading(key: key, isLoading: true)
         isLoading = true
 
-        // Fetch the thumbnail on a background queue
         DispatchQueue.global(qos: .userInitiated).async {
             let manager = PHImageManager.default()
             let options = PHImageRequestOptions()
-            options.deliveryMode = .opportunistic // Get fast image first, then higher quality if needed
+            options.deliveryMode = .opportunistic
             options.resizeMode = .exact
             options.isNetworkAccessAllowed = true
             options.isSynchronous = false
-            
+
             manager.requestImage(for: asset,
-                                targetSize: targetSize,
-                                contentMode: .aspectFill,
-                                options: options) { result, info in
-                
-                // Mark as no longer loading
+                                  targetSize: targetSize,
+                                  contentMode: .aspectFill,
+                                  options: options) { result, info in
+
                 cache.setLoading(key: key, isLoading: false)
-                
+
                 if let result = result, let info = info, info[PHImageResultIsDegradedKey] as? Bool == false {
-                    // Only cache and display the final (non-degraded) image
                     cache.setImage(result, for: key)
-                    
                     DispatchQueue.main.async {
                         self.thumbnail = result
                         self.isLoading = false
                         self.loadFailed = false
                     }
                 } else if result == nil {
-                    // Handle failure case
                     DispatchQueue.main.async {
                         self.isLoading = false
                         self.loadFailed = true
                     }
                 }
-                // Note: If this is a degraded (low-res) image, we'll get another callback with the high-res version
             }
         }
     }
-    
+
     private func timeString(from seconds: TimeInterval) -> String {
         let minutes = Int(seconds) / 60
         let remainingSeconds = Int(seconds) % 60
         return String(format: "%d:%02d", minutes, remainingSeconds)
     }
-    
+
     private func hapticFeedback(style: UIImpactFeedbackGenerator.FeedbackStyle) {
         UIImpactFeedbackGenerator(style: style).impactOccurred()
     }

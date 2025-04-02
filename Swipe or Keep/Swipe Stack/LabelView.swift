@@ -11,9 +11,14 @@ struct LabelView: View {
                 .shadow(color: color.opacity(0.6), radius: 8, x: 0, y: 4) // Softer shadow for depth
 
             VStack(spacing: 5) {
-                Image(systemName: text == "Keep" ? "hand.thumbsup.fill" : "trash.fill")
-                    .font(.system(size: 40, weight: .bold))
-                    .foregroundColor(.white)
+                // Different icons based on the action
+                Image(systemName:
+                    text == "Keep" ? "hand.thumbsup.fill" :
+                    text == "Delete" ? "trash.fill" :
+                    text == "Skip" ? "forward.fill" : "questionmark"
+                )
+                .font(.system(size: 40, weight: .bold))
+                .foregroundColor(.white)
 
                 Text(text)
                     .font(.system(.title, design: .rounded))
@@ -29,5 +34,6 @@ struct LabelView: View {
     VStack(spacing: 20) {
         LabelView(text: "Keep", color: Color.green)
         LabelView(text: "Delete", color: Color.red)
+        LabelView(text: "Skip", color: Color.blue)
     }
 }
