@@ -1,9 +1,13 @@
 import SwiftUI
+import SafariServices
 
 struct PaywallMaxView: View {
     @Environment(\.dismiss) var dismiss
     @State private var animate = false
     @State private var showAdView = false // Controls AdView presentation
+    @State private var showingTermsOfUse = false // Controls Terms & Conditions sheet
+    
+    private let termsOfUseURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
 
     var body: some View {
         ZStack {
@@ -112,9 +116,13 @@ struct PaywallMaxView: View {
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(.white.opacity(0.8))
                     
-                    Text("By subscribing, you agree to our Terms & Conditions.")
+                    Text("Terms of Use")
                         .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(.black)
+                        .underline()
+                        .onTapGesture {
+                            showingTermsOfUse = true
+                        }
                 }
                 .padding(.top, 60)
                 
@@ -125,9 +133,13 @@ struct PaywallMaxView: View {
         .fullScreenCover(isPresented: $showAdView) {
             AdView() // Opens AdView full screen
         }
+        .sheet(isPresented: $showingTermsOfUse) {
+            SafariView(url: termsOfUseURL)
+        }
         .interactiveDismissDisabled(true) // Prevents swipe-down dismissal
     }
 }
+
 
 struct PaywallMaxView_Previews: PreviewProvider {
     static var previews: some View {

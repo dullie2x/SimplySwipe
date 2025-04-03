@@ -1,7 +1,13 @@
 import SwiftUI
+import SafariServices
 
 struct SettingsView: View {
     @State private var showingResetConfirmation = false
+    @State private var showingPrivacyPolicy = false
+    @State private var showingTermsOfUse = false
+    
+    private let privacyPolicyURL = URL(string: "https://www.ariestates.com/swipewipe")!
+    private let termsOfUseURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
     
     var body: some View {
         ScrollView {
@@ -24,6 +30,22 @@ struct SettingsView: View {
                 }) {
                     statActionCard(icon: "arrow.counterclockwise", title: "Reset Swiping Progress")
                 }
+                
+                // Privacy Policy
+                Button(action: {
+                    showingPrivacyPolicy = true
+                }) {
+                    statActionCard(icon: "lock.shield", title: "Privacy Policy")
+                }
+                
+                // Terms of Use
+                Button(action: {
+                    showingTermsOfUse = true
+                }) {
+                    statActionCard(icon: "doc.text", title: "Terms of Use")
+                }
+                
+                Spacer()
             }
             .padding(.bottom, 25) // Only keep bottom padding for spacing
             .background(Color.black.edgesIgnoringSafeArea(.all))
@@ -39,6 +61,12 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("This will reset all of your swiping progress. This action cannot be undone.")
+        }
+        .sheet(isPresented: $showingPrivacyPolicy) {
+            SafariView(url: privacyPolicyURL)
+        }
+        .sheet(isPresented: $showingTermsOfUse) {
+            SafariView(url: termsOfUseURL)
         }
     }
 
@@ -70,6 +98,19 @@ struct SettingsView: View {
     private func resetAllProgress() {
         SwipedMediaManager.shared.resetAllSwipedMedia()
         UserDefaults.standard.set(0, forKey: "swipeCount")
+    }
+}
+
+// Safari View Controller wrapper
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+    
+    func makeUIViewController(context: UIViewControllerRepresentableContext<SafariView>) -> SFSafariViewController {
+        return SFSafariViewController(url: url)
+    }
+    
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: UIViewControllerRepresentableContext<SafariView>) {
+        // No update needed
     }
 }
 

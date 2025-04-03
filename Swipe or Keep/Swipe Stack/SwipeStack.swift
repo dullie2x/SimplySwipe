@@ -19,7 +19,7 @@ struct SwipeStack: View {
     @State private var mediaItems: [PHAsset] = []
     @State private var paginatedMediaItems: [PHAsset] = []
     @State private var mediaSize: String = "0 MB"
-    @State private var mediaDate: String = "" // Add date property
+    @State private var mediaDate: String = ""
     @State private var isLoading = true
     @State private var loadingProgress: Double = 0.0
     @State private var swipeCount = UserDefaults.standard.integer(forKey: "swipeCount")
@@ -28,11 +28,18 @@ struct SwipeStack: View {
     @State private var previousIndices: [Int] = []
     @State private var maxGoBackCount = 2
     
+    // New state variables for the break feature
+    @State private var showingBreakView = false
+    @State private var currentBatch = 0
+    @State private var isFetchingNextBatch = false
+    
     // Use NSCache for better memory management
     private let preloadedPlayers: NSCache<NSNumber, CachedPlayer>
     private let highQualityImageCache: NSCache<NSNumber, UIImage>
     private let lowQualityImageCache: NSCache<NSNumber, UIImage>
     
+    // Batch size for the break feature
+    private let batchSize = 75
     // Optimize page size and preload window
     private let pageSize = 20
     private let preloadWindow = 5
@@ -53,139 +60,280 @@ struct SwipeStack: View {
     }
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Top inline navigation bar
-            HStack {
-                if !isLoading && currentIndex < mediaItems.count {
-                    // Size on the left
-                    Text(mediaSize)
-                        .font(Font.title2.weight(.heavy))
-                        .foregroundColor(.green)
-                        .padding(8)
-                        .onChange(of: currentIndex) { _ in
-                            updateMediaSize()
-                            updateMediaDate()
-                            preloadContentForCurrentIndex()
-                            cleanupOldContent()
-                            pauseNonFocusedVideos()
-                        }
-                    
-                    Spacer() // Push size to left and center the date
-                    
-                    // Date in center with custom format
-                    Text(mediaDate)
-                        .font(Font.title2.weight(.heavy))
-                        .foregroundColor(.green)
-                        .padding(8)
-                    
-                    Spacer() // Center date and push go back to right
-                    
-                    // Go back button on the right
-                    Button(action: goBack) {
-                        Image(systemName: "arrow.uturn.left")
-                            .font(.system(size: 24, weight: .bold))
-                            .foregroundColor(!previousIndices.isEmpty ? .green : .gray)
+        ZStack {
+            VStack(spacing: 0) {
+                // Top inline navigation bar
+                HStack {
+                    if !isLoading && currentIndex < paginatedMediaItems.count {
+                        // Size on the left
+                        Text(mediaSize)
+                            .font(Font.title2.weight(.heavy))
+                            .foregroundColor(.green)
                             .padding(8)
+                            .onChange(of: currentIndex) { _ in
+                                updateMediaSize()
+                                updateMediaDate()
+                                preloadContentForCurrentIndex()
+                                cleanupOldContent()
+                                pauseNonFocusedVideos()
+                                checkForBreak()
+                            }
+                        
+                        Spacer() // Push size to left and center the date
+                        
+                        // Date in center with custom format
+                        Text(mediaDate)
+                            .font(Font.title2.weight(.heavy))
+                            .foregroundColor(.green)
+                            .padding(8)
+                        
+                        Spacer() // Center date and push go back to right
+                        
+                        // Go back button on the right
+                        Button(action: goBack) {
+                            Image(systemName: "arrow.uturn.left")
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundColor(!previousIndices.isEmpty ? .green : .gray)
+                                .padding(8)
+                        }
+                        .disabled(previousIndices.isEmpty) // Disable when no history available
+                    } else {
+                        Spacer()
                     }
-                    .disabled(previousIndices.isEmpty) // Disable when no history available
-                } else {
-                    Spacer()
                 }
-            }
-            .padding(.vertical, 5)
-            .background(Color.black)
-            .zIndex(2) // Ensure navbar stays on top
-            
-            // Main content remains the same
-            ZStack {
-                // Content remains the same
-                if isLoading {
-                    VStack(spacing: 25) {
-                        // Loading spinner (unchanged)
-                        ZStack {
-                            // Outer glow effect
-                            Circle()
-                                .fill(Color.green.opacity(0.2))
-                                .frame(width: 120, height: 120)
-                                .blur(radius: 10)
-                            
-                            // Inner circle
-                            Circle()
-                                .fill(Color.black)
-                                .frame(width: 100, height: 100)
-                                .overlay(
-                                    Circle()
-                                        .stroke(
-                                            LinearGradient(
-                                                gradient: Gradient(colors: [Color.green.opacity(0.8), Color.green.opacity(0.4)]),
-                                                startPoint: .topLeading,
-                                                endPoint: .bottomTrailing
-                                            ),
-                                            lineWidth: 3
-                                        )
-                                )
-                            
-                            // Progress view with percentage
-                            VStack(spacing: 5) {
-                                ProgressView(value: loadingProgress, total: 1.0)
-                                    .progressViewStyle(CircularProgressViewStyle(tint: Color.green))
-                                    .scaleEffect(1.5)
+                .padding(.vertical, 5)
+                .background(Color.black)
+                .zIndex(2) // Ensure navbar stays on top
+                
+                // Main content remains the same
+                ZStack {
+                    // Content remains the same
+                    if isLoading {
+                        VStack(spacing: 25) {
+                            // Loading spinner (unchanged)
+                            ZStack {
+                                // Outer glow effect
+                                Circle()
+                                    .fill(Color.green.opacity(0.2))
+                                    .frame(width: 120, height: 120)
+                                    .blur(radius: 10)
                                 
-                                Text("\(Int(loadingProgress * 100))%")
-                                    .font(.headline.bold())
-                                    .foregroundColor(.green)
+                                // Inner circle
+                                Circle()
+                                    .fill(Color.black)
+                                    .frame(width: 100, height: 100)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(
+                                                LinearGradient(
+                                                    gradient: Gradient(colors: [Color.green.opacity(0.8), Color.green.opacity(0.4)]),
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                ),
+                                                lineWidth: 3
+                                            )
+                                    )
+                                
+                                // Progress view with percentage
+                                VStack(spacing: 5) {
+                                    ProgressView(value: loadingProgress, total: 1.0)
+                                        .progressViewStyle(CircularProgressViewStyle(tint: Color.green))
+                                        .scaleEffect(1.5)
+                                    
+                                    Text("\(Int(loadingProgress * 100))%")
+                                        .font(.headline.bold())
+                                        .foregroundColor(.green)
+                                }
                             }
                         }
-                        
-                        // Loading text
-//                        Text("Loading Media...")
-//                            .font(.title2.bold())
-//                            .foregroundColor(.white)
-//                            .shadow(color: Color.green.opacity(0.5), radius: 2)
-                    }
-                    .padding(30)
-                    .scaleEffect(1.0)
-                    .animation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: UUID())
-                } else if mediaItems.isEmpty {
-                    VStack {
-                        Text("No Media Found")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .foregroundColor(.green)
-                            .padding()
-                    }
-                } else {
-                    GeometryReader { geometry in
-                        ZStack {
-                            ForEach(currentIndex..<min(currentIndex + 2, paginatedMediaItems.count), id: \.self) { index in
-                                if index < paginatedMediaItems.count {
-                                    MediaCardView(
-                                        asset: paginatedMediaItems[index],
-                                        size: CGSize(width: geometry.size.width - CGFloat((index - currentIndex) * 15),
-                                                   height: geometry.size.height - CGFloat((index - currentIndex) * 15)),
-                                        offset: index == currentIndex ? $offset : .constant(.zero),
-                                        onSwiped: handleSwipe,
-                                        player: getPlayer(for: index),
-                                        highQualityImage: getHighQualityImage(for: index),
-                                        lowQualityImage: getLowQualityImage(for: index)
-                                    )
-                                    .zIndex(Double(-index))
-                                    .offset(x: CGFloat((index - currentIndex) * 10), y: CGFloat((index - currentIndex) * 10))
-                                    .scaleEffect(index == currentIndex ? 1.0 : 0.95, anchor: .center)
-                                    .animation(.spring(response: 0.3, dampingFraction: 0.8, blendDuration: 0.2), value: currentIndex)
+                        .padding(30)
+                        .scaleEffect(1.0)
+                        .animation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: UUID())
+                    } else if mediaItems.isEmpty {
+                        VStack {
+                            Text("No Media Found")
+                                .font(.largeTitle)
+                                .fontWeight(.bold)
+                                .foregroundColor(.green)
+                                .padding()
+                        }
+                    } else if !showingBreakView {
+                        GeometryReader { geometry in
+                            ZStack {
+                                ForEach(currentIndex..<min(currentIndex + 2, paginatedMediaItems.count), id: \.self) { index in
+                                    if index < paginatedMediaItems.count {
+                                        MediaCardView(
+                                            asset: paginatedMediaItems[index],
+                                            size: CGSize(width: geometry.size.width - CGFloat((index - currentIndex) * 15),
+                                                       height: geometry.size.height - CGFloat((index - currentIndex) * 15)),
+                                            offset: index == currentIndex ? $offset : .constant(.zero),
+                                            onSwiped: handleSwipe,
+                                            player: getPlayer(for: index),
+                                            highQualityImage: getHighQualityImage(for: index),
+                                            lowQualityImage: getLowQualityImage(for: index)
+                                        )
+                                        .zIndex(Double(-index))
+                                        .offset(x: CGFloat((index - currentIndex) * 10), y: CGFloat((index - currentIndex) * 10))
+                                        .scaleEffect(index == currentIndex ? 1.0 : 0.95, anchor: .center)
+                                        .animation(.spring(response: 0.3, dampingFraction: 0.8, blendDuration: 0.2), value: currentIndex)
+                                    }
                                 }
                             }
                         }
                     }
                 }
+                .frame(maxHeight: .infinity)
             }
-            .frame(maxHeight: .infinity)
+            .background(Color.black.ignoresSafeArea())
+            
+            // Break view overlay
+            if showingBreakView {
+                BreakView(
+                    batchNumber: currentBatch,
+                    isLoading: $isFetchingNextBatch,
+                    onContinue: fetchNextBatch
+                )
+                .transition(.opacity)
+                .zIndex(10)
+            }
         }
-        .background(Color.black.ignoresSafeArea())
         .onAppear(perform: initializeAudioSession)
         .onAppear(perform: fetchMedia)
-        .onAppear(perform: updateMediaDate) // Add updateMediaDate
+        .onAppear(perform: updateMediaDate)
         .navigationBarHidden(true)
+    }
+    
+    // Check if we should show the break view
+    private func checkForBreak() {
+        // Show break view when we've reached the end of the paginated items
+        // But only if we're not at the end of all media items
+        if currentIndex >= paginatedMediaItems.count && currentIndex < mediaItems.count {
+            // Delay showing break view by a tiny bit to ensure smooth transition
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                withAnimation {
+                    showingBreakView = true
+                }
+            }
+        }
+    }
+    
+
+    
+    // Fetch next batch of items
+    private func fetchNextBatch() {
+        isFetchingNextBatch = true
+        
+        // Clear current assets to free up memory
+        preloadedPlayers.removeAllObjects()
+        highQualityImageCache.removeAllObjects()
+        lowQualityImageCache.removeAllObjects()
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            // Calculate the start index for the next batch
+            let startIndex = (currentBatch + 1) * batchSize
+            
+            // Make sure we don't go past the end of all media items
+            if startIndex < mediaItems.count {
+                // Calculate how many items to fetch for the next batch
+                let endIndex = min(startIndex + batchSize, mediaItems.count)
+                
+                // Get the next batch of items
+                let nextBatch = Array(mediaItems[startIndex..<endIndex])
+                
+                // Pre-load a few items before revealing the next batch
+                let preloadGroup = DispatchGroup()
+                let preloadCount = min(3, nextBatch.count)
+                
+                for i in 0..<preloadCount {
+                    let asset = nextBatch[i]
+                    preloadGroup.enter()
+                    
+                    if asset.mediaType == .video {
+                        self.preloadVideo(for: i, asset: asset) {
+                            preloadGroup.leave()
+                        }
+                    } else {
+                        self.fetchThumbnailImage(for: i, asset: asset) {
+                            // Then load high quality in background
+                            self.fetchHighQualityImage(for: i, asset: asset) {
+                                preloadGroup.leave()
+                            }
+                        }
+                    }
+                }
+                
+                preloadGroup.notify(queue: .main) {
+                    // Replace the paginated items with the new batch
+                    self.paginatedMediaItems = nextBatch
+                    
+                    // Reset currentIndex to the beginning of the new batch
+                    self.currentIndex = 0
+                    
+                    // Clear previous history as we're starting a new batch
+                    self.previousIndices = []
+                    
+                    // Increment batch counter
+                    self.currentBatch += 1
+                    
+                    // Update display for the first item in the new batch
+                    self.updateMediaSize()
+                    self.updateMediaDate()
+                    
+                    // Hide break view
+                    withAnimation {
+                        self.showingBreakView = false
+                        self.isFetchingNextBatch = false
+                    }
+                    
+                    // Continue preloading more items in background
+                    self.preloadContentForCurrentIndex()
+                }
+            } else {
+                // We've reached the end, loop back to the beginning
+                let firstBatch = Array(self.mediaItems.prefix(min(self.batchSize, self.mediaItems.count)))
+                
+                // Pre-load a few items before revealing the first batch
+                let preloadGroup = DispatchGroup()
+                let preloadCount = min(3, firstBatch.count)
+                
+                for i in 0..<preloadCount {
+                    let asset = firstBatch[i]
+                    preloadGroup.enter()
+                    
+                    if asset.mediaType == .video {
+                        self.preloadVideo(for: i, asset: asset) {
+                            preloadGroup.leave()
+                        }
+                    } else {
+                        self.fetchThumbnailImage(for: i, asset: asset) {
+                            self.fetchHighQualityImage(for: i, asset: asset) {
+                                preloadGroup.leave()
+                            }
+                        }
+                    }
+                }
+                
+                preloadGroup.notify(queue: .main) {
+                    self.currentBatch = 0
+                    self.currentIndex = 0
+                    self.paginatedMediaItems = firstBatch
+                    self.previousIndices = []
+                    
+                    // Update display for the first item
+                    self.updateMediaSize()
+                    self.updateMediaDate()
+                    
+                    // Hide break view
+                    withAnimation {
+                        self.showingBreakView = false
+                        self.isFetchingNextBatch = false
+                    }
+                    
+                    // Continue preloading more items in background
+                    self.preloadContentForCurrentIndex()
+                }
+            }
+        }
     }
     
     // Add function to update media date
@@ -218,7 +366,7 @@ struct SwipeStack: View {
             
             // Update UI for the new current index
             updateMediaSize()
-            updateMediaDate() // Add date update when going back
+            updateMediaDate()
             preloadContentForCurrentIndex()
             pauseNonFocusedVideos()
         }
@@ -247,6 +395,7 @@ struct SwipeStack: View {
         }
     }
     
+    // Modified to load only first batch
     func fetchMedia() {
         isLoading = true
         loadingProgress = 0.0
@@ -262,9 +411,13 @@ struct SwipeStack: View {
                     }
                     
                     self.mediaItems = fetchedMedia
-                    self.paginatedMediaItems = Array(fetchedMedia.prefix(self.pageSize))
+                    
+                    // Only load the first batch initially
+                    let firstBatchSize = min(self.batchSize, fetchedMedia.count)
+                    self.paginatedMediaItems = Array(fetchedMedia.prefix(firstBatchSize))
+                    
                     self.updateMediaSize()
-                    self.updateMediaDate() // Add date update after media is loaded
+                    self.updateMediaDate()
                     self.preloadInitialContent()
                 }
             }
@@ -298,7 +451,7 @@ struct SwipeStack: View {
             
             group.notify(queue: .main) {
                 self.isLoading = false
-                self.updateMediaDate() // Update date when content is loaded
+                self.updateMediaDate()
                 
                 // Start playing video if the first item is a video
                 if self.currentIndex < self.paginatedMediaItems.count,
@@ -311,14 +464,17 @@ struct SwipeStack: View {
         }
     }
     
-    // Rest of the functions remain the same
     func preloadContentForCurrentIndex() {
         pauseNonFocusedVideos()
         
         // First, check if we're at or past the end
         guard currentIndex < paginatedMediaItems.count else {
-            // Check if we need to loop back to the beginning
-            if currentIndex >= mediaItems.count && mediaItems.count > 0 {
+            // Check if we need to load more from mediaItems
+            if currentIndex >= paginatedMediaItems.count && currentIndex < mediaItems.count {
+                // Instead of loading more, show the break view at batch boundaries
+                checkForBreak()
+            } else if currentIndex >= mediaItems.count && mediaItems.count > 0 {
+                // Loop back to beginning
                 currentIndex = 0
                 resetAndReload()
             }
@@ -353,9 +509,6 @@ struct SwipeStack: View {
                 }
             }
         }
-        
-        // Load more paginated items if needed
-        fetchMoreMediaIfNeeded()
     }
     
     private func resetAndReload() {
@@ -367,14 +520,17 @@ struct SwipeStack: View {
         // Reset history when looping back
         previousIndices = []
         
+        // Reset batch counter
+        currentBatch = 0
+        
         // Reload paginated items and preload content
-        paginatedMediaItems = Array(mediaItems.prefix(pageSize))
+        let firstBatchSize = min(batchSize, mediaItems.count)
+        paginatedMediaItems = Array(mediaItems.prefix(firstBatchSize))
         updateMediaSize()
-        updateMediaDate() // Add date update when reloading
+        updateMediaDate()
         preloadContentForCurrentIndex()
     }
     
-    // The rest of the implementation remains unchanged
     func cleanupOldContent() {
         // Only attempt cleanup if we've advanced far enough
         guard currentIndex > 2 else { return }
@@ -493,20 +649,6 @@ struct SwipeStack: View {
         }
     }
     
-    func fetchMoreMediaIfNeeded() {
-        // More efficient pagination - only fetch next batch when needed
-        if currentIndex >= paginatedMediaItems.count - preloadWindow {
-            let fetchedCount = paginatedMediaItems.count
-            let remainingCount = mediaItems.count - fetchedCount
-            
-            if remainingCount > 0 {
-                let nextBatchCount = min(pageSize, remainingCount)
-                let nextBatch = Array(mediaItems[fetchedCount..<(fetchedCount + nextBatchCount)])
-                paginatedMediaItems.append(contentsOf: nextBatch)
-            }
-        }
-    }
-    
     // Modified handleSwipe to track previous indices
     func handleSwipe(direction: SwipeDirection) {
         if currentIndex < paginatedMediaItems.count {
@@ -546,14 +688,9 @@ struct SwipeStack: View {
 
             self.cleanupOldContent()
             self.preloadContentForCurrentIndex()
-
-            if self.currentIndex >= self.mediaItems.count && !self.mediaItems.isEmpty {
-                self.currentIndex = 0
-                self.resetAndReload()
-            }
+            self.checkForBreak()  // Check if we need to show break after swiping
         }
     }
-
     
     func updateMediaSize() {
         guard currentIndex < paginatedMediaItems.count else { return }
@@ -561,5 +698,88 @@ struct SwipeStack: View {
         
         // Use MediaManager to get size or implement directly
         mediaSize = MediaManager.shared.updateMediaSize(for: paginatedMediaItems, index: currentIndex)
+    }
+}
+
+// Break View component
+struct BreakView: View {
+    let batchNumber: Int
+    @Binding var isLoading: Bool
+    let onContinue: () -> Void
+    
+    var body: some View {
+        ZStack {
+            // Dark overlay
+            Color.black.opacity(0.85)
+                .edgesIgnoringSafeArea(.all)
+            
+            VStack(spacing: 25) {
+                // Glowing title
+                Text("Quick Break")
+                    .font(.system(size: 36, weight: .bold))
+                    .foregroundColor(.white)
+                    .shadow(color: Color.green.opacity(0.8), radius: 10)
+                
+                // Message without item count
+                VStack(spacing: 15) {
+                    Text("Great Progress!")
+                        .font(.title2.bold())
+                        .foregroundColor(.green)
+                    
+                    Text("Don't Forget To Review Your Trashed Items!")
+                        .font(.body)
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.black.opacity(0.7))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(LinearGradient(
+                                    gradient: Gradient(colors: [Color.green.opacity(0.8), Color.green.opacity(0.3)]),
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ), lineWidth: 2)
+                        )
+                )
+                .padding()
+                
+                // Continue button only
+                Button(action: onContinue) {
+                    HStack {
+                        if isLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "arrow.right")
+                                .font(.title3)
+                        }
+                        
+                        Text(isLoading ? "Loading" : "Continue")
+                            .font(.headline)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.green.opacity(0.3))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.green.opacity(0.7), lineWidth: 2)
+                            )
+                    )
+                }
+                .foregroundColor(.white)
+                .disabled(isLoading)
+                .padding(.horizontal)
+                .padding(.horizontal)
+            }
+            .padding()
+            .frame(maxWidth: 400)
+        }
     }
 }
