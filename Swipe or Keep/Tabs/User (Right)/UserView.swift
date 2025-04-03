@@ -4,18 +4,18 @@ import Photos
 struct UserView: View {
     @State private var photoCount = UserDefaults.standard.integer(forKey: "photoCount")
     @State private var videoCount = UserDefaults.standard.integer(forKey: "videoCount")
-    @State private var swipeCount = UserDefaults.standard.integer(forKey: "swipeCount")
     @State private var isFetching = false
     @State private var showPaywall = false
 
     @ObservedObject private var swipedMediaManager = SwipedMediaManager.shared
+    @ObservedObject private var swipeData = SwipeData.shared
 
     private var isSubscribed: Bool {
-        UserDefaults.standard.bool(forKey: "isSubscribed")
+        swipeData.isPremium
     }
 
     private var swipesLeft: String {
-        isSubscribed ? "Unlimited" : "\(max(75 - swipeCount, 0))"
+        isSubscribed ? "Unlimited" : "\(max(50 - swipeData.swipeCount, 0))"
     }
 
     var body: some View {
@@ -33,7 +33,7 @@ struct UserView: View {
                     VStack(spacing: 15) {
                         statCard(icon: "photo", title: "Photos", value: "\(photoCount)")
                         statCard(icon: "video", title: "Videos", value: "\(videoCount)")
-                        statCard(icon: "hand.tap", title: "Total Swipes", value: "\(swipeCount)")
+                        statCard(icon: "hand.tap", title: "Total Swipes", value: "\(swipeData.swipeCount)")
                         statCard(icon: "arrow.left.arrow.right", title: "Swipes Remaining", value: swipesLeft, highlight: !isSubscribed)
 
                         Button(action: {
@@ -75,8 +75,31 @@ struct UserView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 20)
                     } else {
-                        Spacer().frame(height: 80)
+                        // Show premium badge instead
+                        HStack(spacing: 12) {
+                            Image(systemName: "crown.fill")
+                                .foregroundColor(.yellow)
+                                .font(.system(size: 22))
+                            
+                            Text("Premium User")
+                                .font(.system(size: 18, weight: .bold, design: .rounded))
+                                .foregroundColor(.yellow)
+                            
+                            Spacer()
+                        }
+                        .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.yellow.opacity(0.1))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.yellow.opacity(0.5), lineWidth: 1.5)
+                                )
+                        )
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 20)
                     }
+
 
                     if isFetching {
                         HStack {
@@ -87,6 +110,26 @@ struct UserView: View {
                         }
                         .padding()
                     }
+#if DEBUG
+Toggle(isOn: Binding<Bool>(
+    get: { swipeData.isPremium },
+    set: { newValue in
+        swipeData.isPremium = newValue
+        UserDefaults.standard.set(newValue, forKey: "isSubscribed")
+    }
+)) {
+    HStack {
+        Text("Simulate Premium User")
+            .font(.system(size: 16, weight: .bold, design: .rounded))
+            .foregroundColor(.white)
+    }
+}
+.padding()
+.background(Color.yellow.opacity(0.1))
+.cornerRadius(12)
+.padding(.horizontal, 16)
+.padding(.bottom, 10)
+#endif
 
                     Spacer().frame(height: 20)
                 }
@@ -97,7 +140,6 @@ struct UserView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     refreshMediaStats()
                 }
-                swipeCount = swipedMediaManager.swipeCount
             }
             .fullScreenCover(isPresented: $showPaywall) {
                 PaywallView()
@@ -155,7 +197,7 @@ struct UserView: View {
 
             Text(value)
                 .font(.system(size: 18, weight: .bold))
-                .foregroundColor(highlight ? .green : .gray)
+                .foregroundColor(title == "Swipes Remaining" ? .green : (highlight ? .green : .gray))
         }
         .padding(.vertical, 16)
         .padding(.horizontal, 20)
@@ -165,6 +207,7 @@ struct UserView: View {
         )
         .padding(.horizontal, 16)
     }
+
 
     func refreshMediaStats() {
         guard !isFetching else { return }

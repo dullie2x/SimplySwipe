@@ -14,7 +14,7 @@ struct FilteredSwipeStack: View {
     @State private var maxGoBackCount = 2
     @State private var mediaDate: String = ""
     @ObservedObject var swipeData = SwipeData.shared
-    @State private var showingPaywall = false
+    @State var showPaywall = false
 
 
     
@@ -34,6 +34,7 @@ struct FilteredSwipeStack: View {
         }
     }
     
+    @State private var swipeCount = UserDefaults.standard.integer(forKey: "swipeCount")
     @Environment(\.presentationMode) var presentationMode
     
     // Reduce the page size from 30 to 15 for better memory management
@@ -186,10 +187,12 @@ struct FilteredSwipeStack: View {
                             // Only render at most 2 cards at a time to reduce memory
                             ForEach(currentIndex..<min(currentIndex + 2, paginatedMediaItems.count), id: \.self) { index in
                                 if index < paginatedMediaItems.count {
+                                    let canSwipe = SwipeData.shared.isPremium || SwipeData.shared.remainingSwipes() > 0
+
                                     FilteredMediaCardView(
                                         asset: paginatedMediaItems[index],
                                         size: CGSize(width: geometry.size.width - CGFloat((index - currentIndex) * 15),
-                                                   height: geometry.size.height - CGFloat((index - currentIndex) * 15)),
+                                                     height: geometry.size.height - CGFloat((index - currentIndex) * 15)),
                                         offset: index == currentIndex ? $offset : .constant(.zero),
                                         onSwiped: handleSwipe,
                                         player: getPlayer(for: index),
@@ -199,9 +202,25 @@ struct FilteredSwipeStack: View {
                                     .zIndex(Double(-index))
                                     .offset(x: CGFloat((index - currentIndex) * 10), y: CGFloat((index - currentIndex) * 10))
                                     .scaleEffect(index == currentIndex ? 1.0 : 0.95, anchor: .center)
+                                    .gesture(
+                                        DragGesture()
+                                            .onChanged { gesture in
+                                                if canSwipe && index == currentIndex {
+                                                    offset = gesture.translation
+                                                }
+                                            }
+                                            .onEnded { _ in
+                                                if canSwipe && index == currentIndex {
+                                                    handleSwipeEnd()
+                                                } else if index == currentIndex {
+                                                    handleSwipe(direction: .left) // Triggers paywall
+                                                }
+                                            }
+                                    )
                                     .animation(.spring(response: 0.3, dampingFraction: 0.8, blendDuration: 0.2), value: currentIndex)
                                 }
                             }
+
                         }
                     }
                 }
@@ -213,6 +232,9 @@ struct FilteredSwipeStack: View {
         .onAppear(perform: fetchFilteredMedia)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             handleAppReturnFromBackground()
+        }
+        .fullScreenCover(isPresented: $showPaywall) {
+            PaywallMaxView()
         }
         .navigationBarHidden(true)
 
@@ -485,6 +507,13 @@ struct FilteredSwipeStack: View {
     }
     
     func handleSwipe(direction: SwipeDirection) {
+        guard SwipeData.shared.isPremium || SwipeData.shared.remainingSwipes() > 0 else {
+            // Show Paywall when out of swipes and not premium
+            showPaywall = true
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            return
+        }
+        
         if currentIndex < paginatedMediaItems.count {
             let currentItem = paginatedMediaItems[currentIndex]
             
@@ -496,36 +525,48 @@ struct FilteredSwipeStack: View {
                 SwipedMediaManager.shared.addSwipedMedia(currentItem, toTrash: false)
 
             case .skip:
-                // Don't trash, just move to next and add back to stack
-                paginatedMediaItems.insert(currentItem, at: currentIndex + 3) // comes back in ~3 cards
+                paginatedMediaItems.insert(currentItem, at: currentIndex + 3)
             }
             
-            // Add current index to history before advancing
-            // Only keep track of the last maxGoBackCount indices
+            // Save current index to goBack history
             previousIndices.append(currentIndex)
             if previousIndices.count > maxGoBackCount {
                 previousIndices.removeFirst()
             }
             
-            // Add haptic feedback
+            // Increment swipe count (respects premium + extra swipes)
+            SwipeData.shared.incrementSwipeCount()
+            
+            // Haptic feedback
             let feedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
-            feedbackGenerator.prepare() // Prepare the generator for better timing
-            feedbackGenerator.impactOccurred() // Trigger the haptic feedback
+            feedbackGenerator.prepare()
+            feedbackGenerator.impactOccurred()
         }
-        
+
         withAnimation(.easeInOut(duration: 0.15)) {
             offset.width = direction == .left ? -1000 : 1000
         }
-        
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) {
             offset = .zero
             currentIndex += 1
-            
-            // Clean up old items and preload new ones
             cleanupOldContent()
             preloadContentForCurrentIndex()
         }
     }
+    
+    func handleSwipeEnd() {
+        if offset.width > 100 {
+            handleSwipe(direction: .right)
+        } else if offset.width < -100 {
+            handleSwipe(direction: .left)
+        } else {
+            withAnimation(.spring()) {
+                offset = .zero
+            }
+        }
+    }
+
     
     func updateMediaSize() {
         guard currentIndex < paginatedMediaItems.count else { return }

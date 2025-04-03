@@ -74,15 +74,15 @@ struct MediaCardView: View {
             swipeLabels
         }
         .offset(offset)
-        .gesture(
-            DragGesture()
-                .onChanged { gesture in
-                    offset = gesture.translation
-                }
-                .onEnded { _ in
-                    handleSwipeEnd()
-                }
-        )
+//        .gesture(
+//            DragGesture()
+//                .onChanged { gesture in
+//                    offset = gesture.translation
+//                }
+//                .onEnded { _ in
+//                    handleSwipeEnd()
+//                }
+//        )
         .onDisappear {
             // Clean up resources
             timeoutTask?.cancel()

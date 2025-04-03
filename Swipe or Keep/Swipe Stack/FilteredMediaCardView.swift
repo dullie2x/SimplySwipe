@@ -45,21 +45,13 @@ struct FilteredMediaCardView: View {
             swipeLabels
         }
         .offset(offset)
-        .gesture(
-            DragGesture()
-                .onChanged { gesture in
-                    offset = gesture.translation
-                }
-                .onEnded { _ in
-                    handleSwipeEnd()
-                }
-        )
         .onDisappear {
             // Clean up resources
             timeoutTask?.cancel()
             player?.pause()
         }
     }
+
     
     // MARK: - View Components
     
