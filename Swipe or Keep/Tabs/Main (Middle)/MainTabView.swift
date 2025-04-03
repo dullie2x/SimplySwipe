@@ -31,6 +31,9 @@ struct MainTabView: View {
 struct CustomTabBar: View {
     @Binding var selectedTab: MainTabView.Tab
     @Namespace private var animation
+    
+    // Add a haptic feedback manager
+    let haptic = UIImpactFeedbackGenerator(style: .medium)
 
     var body: some View {
         HStack(spacing: 40) { // Add spacing between tabs for better layout
@@ -46,8 +49,15 @@ struct CustomTabBar: View {
 
     private func tabBarItem(icon: String, tab: MainTabView.Tab) -> some View {
         Button(action: {
-            withAnimation(.spring()) {
-                selectedTab = tab
+            if selectedTab != tab {
+                // Trigger haptic feedback when changing tabs
+                haptic.prepare()
+                haptic.impactOccurred()
+                
+                // Animate tab change
+                withAnimation(.spring()) {
+                    selectedTab = tab
+                }
             }
         }) {
             VStack(spacing: 5) { // Add spacing between icon and underline

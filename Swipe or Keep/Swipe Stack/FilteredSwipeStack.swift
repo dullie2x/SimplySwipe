@@ -13,6 +13,9 @@ struct FilteredSwipeStack: View {
     @State private var previousIndices: [Int] = []
     @State private var maxGoBackCount = 2
     @State private var mediaDate: String = ""
+    @ObservedObject var swipeData = SwipeData.shared
+    @State private var showingPaywall = false
+
 
     
     // Use NSCache instead of Dictionary for better memory management
@@ -31,7 +34,6 @@ struct FilteredSwipeStack: View {
         }
     }
     
-    @State private var swipeCount = UserDefaults.standard.integer(forKey: "swipeCount")
     @Environment(\.presentationMode) var presentationMode
     
     // Reduce the page size from 30 to 15 for better memory management
@@ -209,7 +211,11 @@ struct FilteredSwipeStack: View {
         .background(Color.black.ignoresSafeArea())
         .onAppear(perform: initializeAudioSession)
         .onAppear(perform: fetchFilteredMedia)
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            handleAppReturnFromBackground()
+        }
         .navigationBarHidden(true)
+
     }
     
     // Function to go back to the previous media
@@ -529,4 +535,19 @@ struct FilteredSwipeStack: View {
             mediaSize = ByteCountFormatter.string(fromByteCount: Int64(resource.value(forKey: "fileSize") as? Int ?? 0), countStyle: .file)
         }
     }
+    
+    func handleAppReturnFromBackground() {
+        print("App returned to foreground. Reloading current and nearby media...")
+
+        // Reset loading flags just in case
+        isLoading = false
+
+        // Reload media size for current asset
+        updateMediaSize()
+
+        // Force preloading current and upcoming content
+        preloadContentForCurrentIndex()
+        pauseNonFocusedVideos()
+    }
+
 }

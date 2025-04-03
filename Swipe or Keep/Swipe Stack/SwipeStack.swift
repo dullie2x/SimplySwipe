@@ -200,6 +200,9 @@ struct SwipeStack: View {
         .onAppear(perform: initializeAudioSession)
         .onAppear(perform: fetchMedia)
         .onAppear(perform: updateMediaDate)
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            handleAppReturnFromBackground()
+        }
         .navigationBarHidden(true)
     }
     
@@ -698,6 +701,16 @@ struct SwipeStack: View {
         
         // Use MediaManager to get size or implement directly
         mediaSize = MediaManager.shared.updateMediaSize(for: paginatedMediaItems, index: currentIndex)
+    }
+    
+    func handleAppReturnFromBackground() {
+        print("App resumed from background. Reloading visible media...")
+
+        // Refresh visible media
+        updateMediaSize()
+        updateMediaDate()
+        preloadContentForCurrentIndex()
+        pauseNonFocusedVideos()
     }
 }
 

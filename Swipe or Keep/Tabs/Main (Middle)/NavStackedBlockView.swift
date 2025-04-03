@@ -89,38 +89,29 @@ struct NavStackedBlocksView: View {
         .fullScreenCover(item: $selectedIndex) { item in
             destinationView(for: item.value)
         }
-        .fullScreenCover(isPresented: $isFolderSelected) {
-            // Reset states on dismissal
-            self.areFolderAssetsReady = false
-            // Schedule a deferred progress calculation when returning from folder view
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                startProgressCalculation()
-            }
-        } content: {
-            // Only show FilteredSwipeStack if assets are ready
+        .fullScreenCover(isPresented: $isFolderSelected, onDismiss: {
+            areFolderAssetsReady = false
+            selectedFolderAssets = [] // ⬅️ ADD THIS LINE
+            startProgressCalculation()
+        }) {
             if areFolderAssetsReady {
                 FilteredSwipeStack(filterOptions: createFolderFilterOptions())
             } else {
                 LoadingView(message: "Loading folder media...") {
-                    // Dismiss action for loading view
                     isFolderSelected = false
                 }
             }
         }
-        .fullScreenCover(isPresented: $isYearSelected) {
-            // Reset states on dismissal
-            self.areYearAssetsReady = false
-            // Schedule a deferred progress calculation when returning from year view
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                startProgressCalculation()
-            }
-        } content: {
-            // Only show FilteredSwipeStack if assets are ready
+
+        .fullScreenCover(isPresented: $isYearSelected, onDismiss: {
+            areYearAssetsReady = false
+            selectedYearAssets = [] // ⬅️ ADD THIS LINE
+            startProgressCalculation()
+        }) {
             if areYearAssetsReady {
                 FilteredSwipeStack(filterOptions: createYearFilterOptions())
             } else {
                 LoadingView(message: "Loading year media...") {
-                    // Dismiss action for loading view
                     isYearSelected = false
                 }
             }
@@ -463,8 +454,8 @@ extension NavStackedBlocksView {
             }
             
             await MainActor.run {
+                self.selectedFolderAssets = [] // Force UI update
                 self.selectedFolderAssets = tempAssets
-                // Now that assets are loaded, mark them as ready
                 self.areFolderAssetsReady = true
             }
         }
@@ -530,8 +521,8 @@ extension NavStackedBlocksView {
             }
             
             await MainActor.run {
+                self.selectedYearAssets = [] // Force UI update
                 self.selectedYearAssets = tempAssets
-                // Now that assets are loaded, mark them as ready
                 self.areYearAssetsReady = true
             }
         }
