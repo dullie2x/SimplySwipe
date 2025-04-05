@@ -9,13 +9,19 @@ struct UserView: View {
     
     @ObservedObject private var swipedMediaManager = SwipedMediaManager.shared
     @ObservedObject private var swipeData = SwipeData.shared
+    @ObservedObject private var storeManager = StoreKitManager.shared
     
     private var isSubscribed: Bool {
         swipeData.isPremium
     }
     
     private var swipesLeft: String {
-        isSubscribed ? "Unlimited" : "\(max(50 - swipeData.swipeCount, 0))"
+        if isSubscribed {
+            return "Unlimited"
+        } else {
+            // Use the remainingSwipes() function which includes base swipes and extra swipes
+            return "\(swipeData.remainingSwipes())"
+        }
     }
     
     var body: some View {
@@ -35,6 +41,16 @@ struct UserView: View {
                         statCard(icon: "video", title: "Videos", value: "\(videoCount)")
                         statCard(icon: "hand.tap", title: "Total Swipes", value: "\(swipeData.swipeCount)")
                         statCard(icon: "arrow.left.arrow.right", title: "Swipes Remaining", value: swipesLeft, highlight: !isSubscribed)
+                        
+                        if !isSubscribed {
+                            // Show Extra Swipes if not subscribed
+                            statCard(
+                                icon: "plus.circle",
+                                title: "Extra Swipes",
+                                value: "\(UserDefaults.standard.integer(forKey: "extraSwipes"))",
+                                highlight: true
+                            )
+                        }
                         
                         Button(action: {
                             // Rate app
@@ -110,26 +126,6 @@ struct UserView: View {
                         }
                         .padding()
                     }
-                    //#if DEBUG
-                    Toggle(isOn: Binding<Bool>(
-                        get: { swipeData.isPremium },
-                        set: { newValue in
-                            swipeData.isPremium = newValue
-                            UserDefaults.standard.set(newValue, forKey: "isSubscribed")
-                        }
-                    )) {
-                        HStack {
-                            Text("Simulate Premium User")
-                                .font(.system(size: 16, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                        }
-                    }
-                    .padding()
-                    .background(Color.yellow.opacity(0.1))
-                    .cornerRadius(12)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 10)
-                    //#endif
                     
                     Spacer().frame(height: 20)
                 }
@@ -140,19 +136,30 @@ struct UserView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     refreshMediaStats()
                 }
+                
+                // Make sure premium status is up to date
+                Task {
+                    await storeManager.checkEntitlements()
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .swipeCountChanged)) { _ in
                 // This is triggered whenever the swipe count changes
-                // No need to refresh media stats, just update the UI
+                // Update UI to reflect new swipe count
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                 refreshMediaStats()
+                
+                // Also check entitlements when returning to foreground
+                Task {
+                    await storeManager.checkEntitlements()
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
                 // This ensures the view refreshes when coming back from another screen
                 refreshMediaStats()
             }
             .fullScreenCover(isPresented: $showPaywall) {
+                // Use PaywallView() or PaywallMaxView() based on your preference
                 PaywallView()
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -208,7 +215,7 @@ struct UserView: View {
             
             Text(value)
                 .font(.system(size: 18, weight: .bold))
-                .foregroundColor(title == "Swipes Remaining" ? .green : (highlight ? .green : .gray))
+                .foregroundColor(title == "Swipes Remaining" || title == "Extra Swipes" ? .green : (highlight ? .green : .gray))
         }
         .padding(.vertical, 16)
         .padding(.horizontal, 20)

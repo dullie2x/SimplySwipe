@@ -4,10 +4,13 @@ import SafariServices
 struct PaywallView: View {
     @Environment(\.dismiss) var dismiss
     @State private var animate = false
-    @State private var showAdView = false // Controls AdView presentation
-    @State private var showingTermsOfUse = false // Controls Terms & Conditions sheet
-
+    @State private var showAdView = false
+    @State private var showingTermsOfUse = false
+    @State private var isRestoring = false
     
+    // Add StoreKitManager
+    @ObservedObject private var storeManager = StoreKitManager.shared
+
     private let termsOfUseURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
 
     var body: some View {
@@ -78,20 +81,74 @@ struct PaywallView: View {
 
                     // Pricing Options
                     VStack(spacing: 15) {
-                        PaywallOption(title: "Unlimited Swipes - Monthly", price: "$2.99 / Month", highlight: false, animate: $animate) {}
-                        PaywallOption(title: "Unlimited Swipes - Yearly", price: "$14.99 / Year", highlight: true, animate: $animate) {}
-                        PaywallOption(title: "Lifetime Access", price: "$29.99 One-Time", highlight: false, animate: $animate) {}
-                        PaywallOption(title: "200 Extra Swipes", price: "$0.99 One-Time", highlight: false, animate: $animate) {}
+                        PaywallOption(
+                            title: "Unlimited Swipes - Monthly",
+                            price: getPriceString(for: .monthly),
+                            highlight: false,
+                            animate: $animate
+                        ) {
+                            storeManager.purchase(.monthly)
+                        }
+                        
+                        PaywallOption(
+                            title: "Unlimited Swipes - Yearly",
+                            price: getPriceString(for: .yearly),
+                            highlight: true,
+                            animate: $animate
+                        ) {
+                            storeManager.purchase(.yearly)
+                        }
+                        
+                        PaywallOption(
+                            title: "Lifetime Access",
+                            price: getPriceString(for: .lifetime),
+                            highlight: false,
+                            animate: $animate
+                        ) {
+                            storeManager.purchase(.lifetime)
+                        }
+                        
+                        PaywallOption(
+                            title: "200 Extra Swipes",
+                            price: getPriceString(for: .extraSwipes),
+                            highlight: false,
+                            animate: $animate
+                        ) {
+                            storeManager.purchase(.extraSwipes)
+                        }
                     }
                     .padding(.horizontal, 20)
 
                     // Terms & Restore Purchase
                     VStack(spacing: 5) {
-                        Button("Restore Purchase") {
-                            // Restore logic
+                        Button(action: {
+                            isRestoring = true
+                            storeManager.restorePurchases()
+                            
+                            // Add a delay to give feedback to the user
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                isRestoring = false
+                                
+                                // If restored successfully and premium, dismiss
+                                if storeManager.isPremium {
+                                    dismiss()
+                                }
+                            }
+                        }) {
+                            if isRestoring {
+                                HStack {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    Text("Restoring...")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.8))
+                                }
+                            } else {
+                                Text("Restore Purchase")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.8))
+                            }
                         }
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white.opacity(0.8))
 
                         Text("Terms of Use")
                             .font(.system(size: 14))
@@ -108,7 +165,25 @@ struct PaywallView: View {
                 .padding(.bottom, 30)
             }
         }
-        .onAppear { animate.toggle() }
+        .onAppear {
+            animate.toggle()
+            
+            // When view appears, check if user is already premium
+            Task {
+                await storeManager.checkEntitlements()
+                
+                // If they're premium, we can dismiss the paywall
+                if storeManager.isPremium {
+                    dismiss()
+                }
+            }
+        }
+        .onChange(of: storeManager.isPremium) { newValue in
+            // If they become premium during this session, dismiss the paywall
+            if newValue {
+                dismiss()
+            }
+        }
         .fullScreenCover(isPresented: $showAdView) {
             AdView()
         }
@@ -117,9 +192,26 @@ struct PaywallView: View {
         }
         .interactiveDismissDisabled(true)
     }
-
+    
+    // Helper function to get formatted price string
+    private func getPriceString(for productID: StoreKitManager.ProductID) -> String {
+        if let product = storeManager.products.first(where: { $0.id == productID.rawValue }) {
+            return product.displayPrice
+        }
+        
+        // Default prices if product info not loaded yet
+        switch productID {
+        case .monthly:
+            return "$2.99 / Month"
+        case .yearly:
+            return "$14.99 / Year"
+        case .lifetime:
+            return "$29.99 One-Time"
+        case .extraSwipes:
+            return "$0.99 One-Time"
+        }
+    }
 }
-
 
 // Unified Paywall Option Button
 struct PaywallOption: View {
@@ -161,12 +253,13 @@ struct PaywallOption: View {
                     .fill(highlight ? Color.yellow.opacity(0.9) : Color.white.opacity(0.1))
                     .shadow(color: highlight ? Color.yellow.opacity(0.5) : Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
             )
-            .scaleEffect(animate ? 1.05 : 1.0)
+            .scaleEffect(highlight && animate ? 1.05 : 1.0)
             .animation(.easeInOut(duration: 0.7), value: animate)
         }
         .padding(.vertical, highlight ? 5 : 0)
     }
 }
+
 
 struct PaywallView_Previews: PreviewProvider {
     static var previews: some View {
