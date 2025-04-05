@@ -55,7 +55,7 @@ struct FilteredSwipeStack: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Top inline navigation bar
+            // Top inline navigation bar with smaller text
             HStack {
                 // Back Button
                 Button(action: {
@@ -63,46 +63,64 @@ struct FilteredSwipeStack: View {
                 }) {
                     Image(systemName: "arrow.left.circle")
                         .resizable()
-                        .frame(width: 30, height: 30)
+                        .frame(width: 26, height: 26)
                         .foregroundColor(.white)
                 }
-                .padding(.leading, 15)
+                .padding(.leading, 10)
                 
                 if !isLoading && currentIndex < mediaItems.count {
-                    Spacer() // Add spacer before size to center it
+                    Spacer()
                     
+                    // Size text with smaller font
                     Text(mediaSize)
-                        .font(Font.title2.weight(.heavy))
+                        .font(Font.callout.weight(.bold))
                         .foregroundColor(.green)
-                        .padding(8)
+                        .padding(.horizontal, 4)
                         .onChange(of: currentIndex) { _ in
                             updateMediaSize()
+                            updateMediaDate()
                             preloadContentForCurrentIndex()
                             cleanupOldContent()
                         }
                     
-                    Spacer() // Add spacer after size to center it
+                    Spacer()
+                    
+                    // Date display with smaller font
+                    Text(mediaDate)
+                        .font(Font.callout.weight(.bold))
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 4)
+                    
+                    Spacer()
+                    
+                    // Share button
+                    if currentIndex < paginatedMediaItems.count {
+                        ShareButton(asset: paginatedMediaItems[currentIndex])
+                            .frame(width: 36, height: 36)
+                    }
                     
                     // Go back button - only enabled if there are previous indices
                     Button(action: goBack) {
                         Image(systemName: "arrow.uturn.left")
-                            .font(.system(size: 24, weight: .bold))
+                            .font(.system(size: 18, weight: .bold))
                             .foregroundColor(!previousIndices.isEmpty ? .green : .gray)
-                            .padding(8)
                     }
-                    .disabled(previousIndices.isEmpty) // Disable button if no history
+                    .disabled(previousIndices.isEmpty)
+                    .padding(.horizontal, 4)
                     
+                    // Counter with smaller font
                     Text("\(currentIndex + 1)/\(mediaItems.count)")
-                        .font(Font.title2.weight(.heavy))
+                        .font(Font.footnote.weight(.bold))
                         .foregroundColor(.green)
-                        .padding(8)
+                        .padding(.horizontal, 6)
                 } else {
                     Spacer()
                 }
             }
-            .padding(.vertical, 5)
+            .padding(.vertical, 4)
             .background(Color.black)
-            .zIndex(2) // Ensure navbar stays on top
+            .zIndex(2)
+            
             
             // Main content
             ZStack {
@@ -230,6 +248,7 @@ struct FilteredSwipeStack: View {
         .background(Color.black.ignoresSafeArea())
         .onAppear(perform: initializeAudioSession)
         .onAppear(perform: fetchFilteredMedia)
+        .onAppear(perform: updateMediaDate)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             handleAppReturnFromBackground()
         }
@@ -238,6 +257,27 @@ struct FilteredSwipeStack: View {
         }
         .navigationBarHidden(true)
 
+    }
+    
+    // Function to update media date
+    func updateMediaDate() {
+        guard currentIndex < paginatedMediaItems.count else {
+            mediaDate = ""
+            return
+        }
+        
+        let asset = paginatedMediaItems[currentIndex]
+        
+        // Create date formatter with custom format (month day, year)
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "MMM d, yyyy"
+        
+        // Format creation date
+        if let creationDate = asset.creationDate {
+            mediaDate = dateFormatter.string(from: creationDate)
+        } else {
+            mediaDate = "No date"
+        }
     }
     
     // Function to go back to the previous media
@@ -249,6 +289,7 @@ struct FilteredSwipeStack: View {
             
             // Update UI for the new current index
             updateMediaSize()
+            updateMediaDate()
             preloadContentForCurrentIndex()
             pauseNonFocusedVideos()
         }
@@ -302,6 +343,7 @@ struct FilteredSwipeStack: View {
                 self.mediaItems = tempMediaItems
                 self.paginatedMediaItems = Array(tempMediaItems.prefix(self.pageSize))
                 self.updateMediaSize()
+                self.updateMediaDate()
                 self.preloadInitialContent()
             }
         }
@@ -585,6 +627,7 @@ struct FilteredSwipeStack: View {
 
         // Reload media size for current asset
         updateMediaSize()
+        updateMediaDate()
 
         // Force preloading current and upcoming content
         preloadContentForCurrentIndex()

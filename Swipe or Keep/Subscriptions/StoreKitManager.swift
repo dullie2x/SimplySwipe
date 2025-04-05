@@ -31,13 +31,14 @@ class StoreKitManager: NSObject, ObservableObject {
     func requestProducts() async {
         do {
             let storeProducts = try await Product.products(for: ProductID.allCases.map { $0.rawValue })
-            DispatchQueue.main.async {
+            await MainActor.run {
                 self.products = storeProducts
             }
         } catch {
             print("Failed to fetch products: \(error)")
         }
     }
+
 
     // MARK: - Purchase
     func purchase(_ productID: ProductID) {

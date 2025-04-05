@@ -508,51 +508,30 @@ class SwipedMediaManager: NSObject, ObservableObject {
 // Photo library change observer implementation
 extension SwipedMediaManager: PHPhotoLibraryChangeObserver {
     nonisolated func photoLibraryDidChange(_ changeInstance: PHChange) {
-        // Use a dedicated class to safely transfer data between threads
-        class DataContainer {
-            var assets: [PHAsset] = []
-        }
-        
-        let container = DataContainer()
-        
-        // Use a dispatch queue to hop to the main thread synchronously
-        let semaphore = DispatchSemaphore(value: 0)
-        DispatchQueue.main.async {
-            // Get the assets from the main thread
-            container.assets = self.trashedMediaAssets
-            semaphore.signal()
-        }
-        semaphore.wait()
-        
-        // Get the assets from the container
-        let assetsToCheck = container.assets
-        
-        // Check if we need to update our asset list
-        var needsUpdate = false
-        
-        // Check if any of our tracked assets have changed
-        for asset in assetsToCheck {
-            if let details = changeInstance.changeDetails(for: asset) {
-                if details.objectWasDeleted {
+        Task {
+            let assetsToCheck = await MainActor.run { self.trashedMediaAssets }
+            
+            var needsUpdate = false
+            
+            for asset in assetsToCheck {
+                if let details = changeInstance.changeDetails(for: asset),
+                   details.objectWasDeleted {
                     needsUpdate = true
                     break
                 }
             }
-        }
-        
-        // Update asset list when photo library changes
-        if needsUpdate {
-            Task { @MainActor in
-                self.updateTrashedMediaAssets()
+            
+            if needsUpdate {
+                await MainActor.run {
+                    self.updateTrashedMediaAssets()
+                    self.categoryProgressCache.removeAll()
+                    self.yearProgressCache.removeAll()
+                    self.albumProgressCache.removeAll()
+                }
                 
-                // Invalidate all progress caches when the photo library changes
-                self.categoryProgressCache.removeAll()
-                self.yearProgressCache.removeAll()
-                self.albumProgressCache.removeAll()
-                
-                // Notify ProgressManager to invalidate its caches as well
                 await ProgressManager.shared.invalidateCache()
             }
         }
     }
 }
+

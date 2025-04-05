@@ -23,6 +23,7 @@ struct SwipeStack: View {
     @State private var isLoading = true
     @State private var loadingProgress: Double = 0.0
     @State private var swipeCount = UserDefaults.standard.integer(forKey: "swipeCount")
+    @State private var showShareSheet = false
     
     // Add previous indices tracking array and maximum go back count
     @State private var previousIndices: [Int] = []
@@ -88,7 +89,13 @@ struct SwipeStack: View {
                             .foregroundColor(.green)
                             .padding(8)
                         
-                        Spacer() // Center date and push go back to right
+                        Spacer() // Center date and push buttons to right
+                        
+                        // Share button
+                        if currentIndex < paginatedMediaItems.count {
+                            ShareButton(asset: paginatedMediaItems[currentIndex])
+                                .frame(width: 44, height: 44)
+                        }
                         
                         // Go back button on the right
                         Button(action: goBack) {
@@ -106,7 +113,7 @@ struct SwipeStack: View {
                 .background(Color.black)
                 .zIndex(2) // Ensure navbar stays on top
                 
-                // Main content remains the same
+                // Content area (unchanged)
                 ZStack {
                     // Content remains the same
                     if isLoading {
@@ -162,7 +169,7 @@ struct SwipeStack: View {
                         GeometryReader { geometry in
                             ZStack {
                                 let canSwipe = SwipeData.shared.isPremium || SwipeData.shared.remainingSwipes() > 0
-
+                                
                                 ForEach(currentIndex..<min(currentIndex + 2, paginatedMediaItems.count), id: \.self) { index in
                                     if index < paginatedMediaItems.count {
                                         MediaCardView(
@@ -198,8 +205,6 @@ struct SwipeStack: View {
                                         .animation(.spring(response: 0.3, dampingFraction: 0.8, blendDuration: 0.2), value: currentIndex)
                                     }
                                 }
-
-
                             }
                         }
                     }
@@ -245,7 +250,7 @@ struct SwipeStack: View {
         }
     }
     
-
+    
     
     // Fetch next batch of items
     private func fetchNextBatch() {
@@ -492,8 +497,8 @@ struct SwipeStack: View {
         }
     }
     
-
-
+    
+    
     func preloadContentForCurrentIndex() {
         pauseNonFocusedVideos()
         
@@ -645,9 +650,9 @@ struct SwipeStack: View {
         
         // Request a smaller thumbnail for faster loading
         manager.requestImage(for: asset,
-                            targetSize: CGSize(width: 300, height: 300),
-                            contentMode: .aspectFill,
-                            options: options) { result, _ in
+                             targetSize: CGSize(width: 300, height: 300),
+                             contentMode: .aspectFill,
+                             options: options) { result, _ in
             if let result = result {
                 self.lowQualityImageCache.setObject(result, forKey: NSNumber(value: index))
             }
@@ -669,9 +674,9 @@ struct SwipeStack: View {
         
         // Reduce image size to 1080p instead of full resolution
         manager.requestImage(for: asset,
-                            targetSize: CGSize(width: 1080, height: 1080),
-                            contentMode: .aspectFit,
-                            options: options) { result, _ in
+                             targetSize: CGSize(width: 1080, height: 1080),
+                             contentMode: .aspectFit,
+                             options: options) { result, _ in
             if let result = result {
                 self.highQualityImageCache.setObject(result, forKey: NSNumber(value: index))
             }
@@ -686,47 +691,47 @@ struct SwipeStack: View {
             showPaywall = true
             return
         }
-
+        
         if currentIndex < paginatedMediaItems.count {
             let currentItem = paginatedMediaItems[currentIndex]
-
+            
             switch direction {
             case .left:
                 SwipedMediaManager.shared.addSwipedMedia(currentItem, toTrash: true)
-
+                
             case .right:
                 SwipedMediaManager.shared.addSwipedMedia(currentItem, toTrash: false)
-
+                
             case .skip:
                 paginatedMediaItems.insert(currentItem, at: currentIndex + 3)
             }
-
+            
             previousIndices.append(currentIndex)
             if previousIndices.count > maxGoBackCount {
                 previousIndices.removeFirst()
             }
-
+            
             SwipeData.shared.incrementSwipeCount()
-
+            
             let feedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
             feedbackGenerator.prepare()
             feedbackGenerator.impactOccurred()
         }
-
+        
         withAnimation(.easeInOut(duration: 0.15)) {
             offset.width = direction == .left ? -1000 : 1000
         }
-
+        
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) {
             offset = .zero
             currentIndex += 1
-
+            
             self.cleanupOldContent()
             self.preloadContentForCurrentIndex()
             self.checkForBreak()
         }
     }
-
+    
     func handleSwipeEnd() {
         if offset.width > 100 {
             handleSwipe(direction: .right)
@@ -749,7 +754,7 @@ struct SwipeStack: View {
     
     func handleAppReturnFromBackground() {
         print("App resumed from background. Reloading visible media...")
-
+        
         // Refresh visible media
         updateMediaSize()
         updateMediaDate()

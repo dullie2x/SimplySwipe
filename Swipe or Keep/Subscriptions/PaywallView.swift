@@ -19,110 +19,105 @@ struct PaywallView: View {
                 endPoint: .bottomTrailing
             )
             .edgesIgnoringSafeArea(.all)
-            
-            VStack(spacing: 20) {
-                // Close Button (Top-Right)
-                HStack {
-                    Spacer()
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .resizable()
-                            .frame(width: 30, height: 30)
-                            .foregroundColor(.white.opacity(0.2))
+
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Close Button (Top-Right)
+                    HStack {
+                        Spacer()
+                        Button(action: { dismiss() }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .resizable()
+                                .frame(width: 30, height: 30)
+                                .foregroundColor(.white.opacity(0.2))
+                                .shadow(radius: 5)
+                        }
+                        .padding(.top, 15)
+                        .padding(.trailing, 15)
+                    }
+
+                    Spacer(minLength: 10)
+
+                    // Title & Subtitle
+                    VStack(spacing: 10) {
+                        Text("Unlock Unlimited Swipes")
+                            .font(.system(size: 30, weight: .heavy, design: .rounded))
+                            .foregroundColor(.white)
                             .shadow(radius: 5)
+
+                        Text("Upgrade or watch an ad for 10 more.")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 10)
                     }
-                    .padding(.top, 15)
-                    .padding(.trailing, 15)
-                }
-                
-                Spacer()
-                
-                // Title & Subtitle
-                VStack(spacing: 10) {
-                    Text("Unlock Unlimited Swipes")
-                        .font(.system(size: 30, weight: .heavy, design: .rounded))
-                        .foregroundColor(.white)
-                        .shadow(radius: 5)
-                    
-                    Text("Upgrade or watch an ad for 10 more.")
-                        .font(.system(size: 18, weight: .medium))
+                    .padding(.top, -20)
+
+                    // Watch Ad Option
+                    VStack(spacing: 10) {
+                        Button(action: {
+                            showAdView = true
+                        }) {
+                            HStack {
+                                Image(systemName: "play.rectangle.fill")
+                                    .foregroundColor(.white)
+                                    .font(.system(size: 22))
+                                Text("Watch Ad for 10 More Swipes")
+                                    .font(.system(size: 18, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue.opacity(0.9))
+                            .cornerRadius(12)
+                            .shadow(radius: 5)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+
+                    // Pricing Options
+                    VStack(spacing: 15) {
+                        PaywallOption(title: "Unlimited Swipes - Monthly", price: "$2.99 / Month", highlight: false, animate: $animate) {}
+                        PaywallOption(title: "Unlimited Swipes - Yearly", price: "$14.99 / Year", highlight: true, animate: $animate) {}
+                        PaywallOption(title: "Lifetime Access", price: "$29.99 One-Time", highlight: false, animate: $animate) {}
+                        PaywallOption(title: "200 Extra Swipes", price: "$0.99 One-Time", highlight: false, animate: $animate) {}
+                    }
+                    .padding(.horizontal, 20)
+
+                    // Terms & Restore Purchase
+                    VStack(spacing: 5) {
+                        Button("Restore Purchase") {
+                            // Restore logic
+                        }
+                        .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.white.opacity(0.8))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                }
-                .padding(.top, -20)
 
-                // **Watch Ad for More Swipes**
-                VStack(spacing: 10) {
-                    Button(action: {
-                        showAdView = true // Show AdView without dismissing PaywallView
-                    }) {
-                        HStack {
-                            Image(systemName: "play.rectangle.fill")
-                                .foregroundColor(.white)
-                                .font(.system(size: 22))
-                            Text("Watch Ad for 10 More Swipes")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundColor(.white)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue.opacity(0.9))
-                        .cornerRadius(12)
-                        .shadow(radius: 5)
+                        Text("Terms of Use")
+                            .font(.system(size: 14))
+                            .foregroundColor(.black)
+                            .underline()
+                            .onTapGesture {
+                                showingTermsOfUse = true
+                            }
                     }
-                }
-                .padding(.horizontal, 20)
+                    .padding(.top, 40)
 
-                // **Pricing Options**
-                VStack(spacing: 15) {
-                    PaywallOption(title: "Unlimited Swipes - Monthly", price: "$2.99 / Month", highlight: false, animate: $animate) {
-                        // Purchase logic for Monthly Plan
-                    }
-                    PaywallOption(title: "Unlimited Swipes - Yearly", price: "$14.99 / Year", highlight: true, animate: $animate) {
-                        // Purchase logic for Yearly Plan
-                    }
-                    PaywallOption(title: "Lifetime Access", price: "$29.99 One-Time", highlight: false, animate: $animate) {
-                        // Purchase logic for Lifetime Plan
-                    }
-                    PaywallOption(title: "200 Extra Swipes", price: "$0.99 One-Time", highlight: false, animate: $animate) {
-                        // Purchase logic for Extra Swipes
-                    }
+                    Spacer(minLength: 40)
                 }
-                .padding(.horizontal, 20)
-
-                // Terms & Restore Purchase
-                VStack(spacing: 5) {
-                    Button("Restore Purchase") {
-                        // Restore purchases logic
-                    }
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white.opacity(0.8))
-                    
-                    Text("Terms of Use")
-                        .font(.system(size: 14))
-                        .foregroundColor(.black)
-                        .underline()
-                        .onTapGesture {
-                            showingTermsOfUse = true
-                        }
-                }
-                .padding(.top, 60)
-                
-                Spacer()
+                .padding(.bottom, 30)
             }
         }
         .onAppear { animate.toggle() }
         .fullScreenCover(isPresented: $showAdView) {
-            AdView() // Opens AdView full screen
+            AdView()
         }
-        // Add sheet presentation for Terms of Use
         .sheet(isPresented: $showingTermsOfUse) {
             SafariView(url: termsOfUseURL)
         }
-        .interactiveDismissDisabled(true) // Prevents swipe-down dismissal
+        .interactiveDismissDisabled(true)
     }
+
 }
 
 

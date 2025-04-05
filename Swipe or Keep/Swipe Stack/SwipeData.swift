@@ -5,6 +5,8 @@ class SwipeData: ObservableObject {
     @Published var swipeCount: Int {
         didSet {
             UserDefaults.standard.set(swipeCount, forKey: "swipeCount")
+            // Post notification when swipeCount changes
+            NotificationCenter.default.post(name: .swipeCountChanged, object: nil)
         }
     }
 
@@ -27,24 +29,21 @@ class SwipeData: ObservableObject {
     }
 
     func incrementSwipeCount() {
-        if isPremium {
-            return // Unlimited swipes
-        }
-
-        // Use extra swipes first
-        if swipeCount >= 50 {
+        // Check if we need to handle swipe limits
+        if !isPremium && swipeCount >= 50 {
+            // Use extra swipes first if available
             var extra = UserDefaults.standard.integer(forKey: "extraSwipes")
             if extra > 0 {
                 extra -= 1
                 UserDefaults.standard.set(extra, forKey: "extraSwipes")
                 print("Used 1 extra swipe. Remaining: \(extra)")
-                return
             }
         }
-
+        
+        // Always increment the swipe count regardless of premium status
         swipeCount += 1
     }
-
+    
     func resetIfNeeded() {
         let today = Calendar.current.startOfDay(for: Date())
         let lastResetDate = UserDefaults.standard.object(forKey: "lastSwipeResetDate") as? Date ?? .distantPast
@@ -63,4 +62,9 @@ class SwipeData: ObservableObject {
         let extras = UserDefaults.standard.integer(forKey: "extraSwipes")
         return base + extras
     }
+}
+
+// Custom notification name for SwipeData changes
+extension Notification.Name {
+    static let swipeCountChanged = Notification.Name("swipeCountChanged")
 }

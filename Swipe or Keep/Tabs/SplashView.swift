@@ -30,7 +30,7 @@ struct SplashView: View {
                 )
                 
                 // Particle effect in background
-                ParticleEffect()
+//                ParticleEffect()
                     .opacity(0.4)
                 
                 VStack(spacing: 30) {
@@ -109,44 +109,44 @@ struct SplashView: View {
     }
 }
 
-// Particle effect component for background visual interest
-struct ParticleEffect: View {
-    @State private var time = 0.0
-    let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
-    
-    var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                ForEach(0..<20) { i in
-                    Circle()
-                        .fill(Color.white.opacity(0.7))
-                        .frame(width: randomSize(seed: i), height: randomSize(seed: i))
-                        .position(
-                            x: randomPosition(max: geometry.size.width, seed: i, time: time),
-                            y: randomPosition(max: geometry.size.height, seed: i + 20, time: time)
-                        )
-                        .blendMode(.screen)
-                }
-            }
-        }
-        .onReceive(timer) { _ in
-            time += 0.1
-        }
-    }
-    
-    // Helper functions for the particle effect
-    func randomSize(seed: Int) -> CGFloat {
-        let base = sin(Double(seed) * 0.3) * 0.5 + 0.5
-        return CGFloat(base * 15 + 2)
-    }
-    
-    func randomPosition(max: CGFloat, seed: Int, time: Double) -> CGFloat {
-        let period = sin(Double(seed) * 0.1) * 10 + 20
-        let amplitude = max * 0.25
-        let base = sin(time / period + Double(seed)) * Double(amplitude)
-        return CGFloat(base + Double(max) / 2)
-    }
-}
+//// Particle effect component for background visual interest
+//struct ParticleEffect: View {
+//    @State private var time = 0.0
+//    let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+//    
+//    var body: some View {
+//        GeometryReader { geometry in
+//            ZStack {
+//                ForEach(0..<20) { i in
+//                    Circle()
+//                        .fill(Color.white.opacity(0.7))
+//                        .frame(width: randomSize(seed: i), height: randomSize(seed: i))
+//                        .position(
+//                            x: randomPosition(max: geometry.size.width, seed: i, time: time),
+//                            y: randomPosition(max: geometry.size.height, seed: i + 20, time: time)
+//                        )
+//                        .blendMode(.screen)
+//                }
+//            }
+//        }
+//        .onReceive(timer) { _ in
+//            time += 0.1
+//        }
+//    }
+//    
+//    // Helper functions for the particle effect
+//    func randomSize(seed: Int) -> CGFloat {
+//        let base = sin(Double(seed) * 0.3) * 0.5 + 0.5
+//        return CGFloat(base * 15 + 2)
+//    }
+//    
+//    func randomPosition(max: CGFloat, seed: Int, time: Double) -> CGFloat {
+//        let period = sin(Double(seed) * 0.1) * 10 + 20
+//        let amplitude = max * 0.25
+//        let base = sin(time / period + Double(seed)) * Double(amplitude)
+//        return CGFloat(base + Double(max) / 2)
+//    }
+//}
 
 
 #Preview {
