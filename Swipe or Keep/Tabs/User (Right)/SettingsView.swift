@@ -18,11 +18,11 @@ struct SettingsView: View {
                     .padding(.top, 12) // Reduced top padding to move it closer to the top
 
                 // Send Feedback
-                Button(action: {
-                    // Add feedback link here
-                }) {
-                    statActionCard(icon: "message.fill", title: "Send Feedback")
-                }
+//                Button(action: {
+//                    // Add feedback link here
+//                }) {
+//                    statActionCard(icon: "message.fill", title: "Send Feedback")
+//                }
 
                 // Reset Swiping Progress
                 Button(action: {
