@@ -11,6 +11,9 @@ struct UserView: View {
     @ObservedObject private var swipeData = SwipeData.shared
     @ObservedObject private var storeManager = StoreKitManager.shared
     
+    // Add a state property to force view refreshes
+    @State private var refreshToggle = false
+    
     private var isSubscribed: Bool {
         swipeData.isPremium
     }
@@ -144,7 +147,8 @@ struct UserView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .swipeCountChanged)) { _ in
                 // This is triggered whenever the swipe count changes
-                // Update UI to reflect new swipe count
+                // Update the UI to reflect new swipe count - FIXED: Force a UI update
+                self.refreshToggle.toggle() // Force view to refresh
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                 refreshMediaStats()
@@ -153,10 +157,16 @@ struct UserView: View {
                 Task {
                     await storeManager.checkEntitlements()
                 }
+                
+                // Force refresh the view
+                self.refreshToggle.toggle()
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
                 // This ensures the view refreshes when coming back from another screen
                 refreshMediaStats()
+                
+                // Force refresh the view
+                self.refreshToggle.toggle()
             }
             .fullScreenCover(isPresented: $showPaywall) {
                 // Use PaywallView() or PaywallMaxView() based on your preference
@@ -174,6 +184,8 @@ struct UserView: View {
             }
         }
     }
+    
+    // No need for a separate refreshView method with the toggle approach
     
     private func statActionCard(icon: String, title: String) -> some View {
         HStack {
@@ -260,6 +272,7 @@ struct UserView: View {
     }
 }
 
+// No need for additional notification names
 
 #Preview {
     UserView()

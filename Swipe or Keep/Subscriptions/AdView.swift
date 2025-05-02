@@ -314,8 +314,10 @@ struct AdView: View {
     // Grant reward and dismiss
     private func grantRewardAndDismiss() {
         print("🎁 AdView: Granting reward manually")
-        let current = UserDefaults.standard.integer(forKey: "extraSwipes")
-        UserDefaults.standard.set(current + 10, forKey: "extraSwipes")
+        
+        // Use SwipeData to manage extra swipes instead of directly modifying UserDefaults
+        SwipeData.shared.addExtraSwipes(10)
+        
         adState = .complete
     }
 }

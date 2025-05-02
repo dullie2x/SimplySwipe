@@ -9,6 +9,15 @@ class SwipeData: ObservableObject {
             NotificationCenter.default.post(name: .swipeCountChanged, object: nil)
         }
     }
+    
+    // Add a published property for extraSwipes
+    @Published var extraSwipes: Int {
+        didSet {
+            UserDefaults.standard.set(extraSwipes, forKey: "extraSwipes")
+            // Post notification when extraSwipes changes
+            NotificationCenter.default.post(name: .swipeCountChanged, object: nil)
+        }
+    }
 
     @Published var isPremium: Bool = false
     private var cancellables = Set<AnyCancellable>()
@@ -17,6 +26,7 @@ class SwipeData: ObservableObject {
 
     private init() {
         self.swipeCount = UserDefaults.standard.integer(forKey: "swipeCount")
+        self.extraSwipes = UserDefaults.standard.integer(forKey: "extraSwipes")
         self.isPremium = StoreKitManager.shared.isPremium
 
         // Observe premium status
@@ -32,16 +42,35 @@ class SwipeData: ObservableObject {
         // Check if we need to handle swipe limits
         if !isPremium && swipeCount >= 50 {
             // Use extra swipes first if available
-            var extra = UserDefaults.standard.integer(forKey: "extraSwipes")
-            if extra > 0 {
-                extra -= 1
-                UserDefaults.standard.set(extra, forKey: "extraSwipes")
-                print("Used 1 extra swipe. Remaining: \(extra)")
+            if extraSwipes > 0 {
+                extraSwipes -= 1
+                print("Used 1 extra swipe. Remaining: \(extraSwipes)")
             }
         }
         
         // Always increment the swipe count regardless of premium status
         swipeCount += 1
+    }
+    
+    // Add method to add extra swipes (for purchases and ads)
+    func addExtraSwipes(_ count: Int) {
+        extraSwipes += count
+    }
+    
+    // Add method to refresh values from UserDefaults
+    func refreshFromUserDefaults() {
+        let newExtraSwipes = UserDefaults.standard.integer(forKey: "extraSwipes")
+        if newExtraSwipes != extraSwipes {
+            extraSwipes = newExtraSwipes
+        }
+        
+        let newSwipeCount = UserDefaults.standard.integer(forKey: "swipeCount")
+        if newSwipeCount != swipeCount {
+            swipeCount = newSwipeCount
+        }
+        
+        // Post notification to update UI
+        NotificationCenter.default.post(name: .swipeCountChanged, object: nil)
     }
     
     func resetIfNeeded() {
@@ -59,8 +88,7 @@ class SwipeData: ObservableObject {
         if isPremium { return .max }
 
         let base = max(0, 50 - swipeCount)
-        let extras = UserDefaults.standard.integer(forKey: "extraSwipes")
-        return base + extras
+        return base + extraSwipes
     }
 }
 

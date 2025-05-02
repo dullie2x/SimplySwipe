@@ -5,12 +5,12 @@ import Combine
 
 class StoreKitManager: NSObject, ObservableObject {
     static let shared = StoreKitManager()
-
+    
     @Published var isPremium: Bool = false
     @Published var products: [Product] = []
+    
     private var updateListenerTask: Task<Void, Error>? = nil
-
-    // MARK: - Product Identifiers
+    
     enum ProductID: String, CaseIterable {
         case monthly = "com.simplyswipe.premium.monthly"
         case yearly = "com.simplyswipe.premium.yearly"
@@ -20,30 +20,31 @@ class StoreKitManager: NSObject, ObservableObject {
 
     private override init() {
         super.init()
+        
         Task {
             await requestProducts()
             await listenForTransactions()
             await checkEntitlements()
         }
     }
-
+    
     // MARK: - Fetch Available Products
+    @MainActor
     func requestProducts() async {
         do {
             let storeProducts = try await Product.products(for: ProductID.allCases.map { $0.rawValue })
-            await MainActor.run {
-                self.products = storeProducts
-            }
+            self.products = storeProducts
+            print("✅ Products loaded: \(storeProducts.map { $0.id })")
         } catch {
-            print("Failed to fetch products: \(error)")
+            print("❌ Failed to fetch products: \(error)")
         }
     }
 
-
     // MARK: - Purchase
+    @MainActor
     func purchase(_ productID: ProductID) {
         guard let product = products.first(where: { $0.id == productID.rawValue }) else {
-            print("Product \(productID.rawValue) not found.")
+            print("❌ Product \(productID.rawValue) not found.")
             return
         }
 
@@ -61,11 +62,11 @@ class StoreKitManager: NSObject, ObservableObject {
                         print("✅ Purchase successful for \(productID.rawValue)")
                     }
                 case .userCancelled:
-                    print("🛑 Purchase cancelled.")
+                    print("🛑 Purchase cancelled by user.")
                 case .pending:
                     print("⏳ Purchase pending.")
                 @unknown default:
-                    break
+                    print("❓ Unknown purchase result.")
                 }
             } catch {
                 print("❌ Purchase error: \(error)")
@@ -76,8 +77,12 @@ class StoreKitManager: NSObject, ObservableObject {
     // MARK: - Restore
     func restorePurchases() {
         Task {
-            try? await AppStore.sync()
-            await checkEntitlements()
+            do {
+                try await AppStore.sync()
+                await checkEntitlements()
+            } catch {
+                print("❌ Restore failed: \(error)")
+            }
         }
     }
 
@@ -91,9 +96,10 @@ class StoreKitManager: NSObject, ObservableObject {
     }
 
     // MARK: - Entitlement Check
+    @MainActor
     func checkEntitlements() async {
         var hasActiveSubscription = false
-
+        
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result {
                 switch transaction.productID {
@@ -107,10 +113,12 @@ class StoreKitManager: NSObject, ObservableObject {
             }
         }
 
-        let isPremiumResult = hasActiveSubscription // ✅ capture safely in a constant
+        let wasPremium = self.isPremium
+        self.isPremium = hasActiveSubscription
 
-        await MainActor.run {
-            self.isPremium = isPremiumResult
+        // Notify UI if premium status changed
+        if wasPremium != self.isPremium {
+            NotificationCenter.default.post(name: .swipeCountChanged, object: nil)
         }
     }
 
@@ -120,10 +128,11 @@ class StoreKitManager: NSObject, ObservableObject {
         case .monthly, .yearly, .lifetime:
             DispatchQueue.main.async {
                 self.isPremium = true
+                NotificationCenter.default.post(name: .swipeCountChanged, object: nil)
             }
         case .extraSwipes:
-            let current = UserDefaults.standard.integer(forKey: "extraSwipes")
-            UserDefaults.standard.set(current + 200, forKey: "extraSwipes")
+            SwipeData.shared.addExtraSwipes(200)
+            NotificationCenter.default.post(name: .swipeCountChanged, object: nil)
         }
     }
 }

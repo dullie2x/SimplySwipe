@@ -24,6 +24,8 @@ struct SwipeStack: View {
     @State private var loadingProgress: Double = 0.0
     @State private var swipeCount = UserDefaults.standard.integer(forKey: "swipeCount")
     @State private var showShareSheet = false
+    @ObservedObject private var swipeData = SwipeData.shared
+    @State private var refreshToggle = false
     
     // Add previous indices tracking array and maximum go back count
     @State private var previousIndices: [Int] = []
@@ -34,6 +36,11 @@ struct SwipeStack: View {
     @State private var currentBatch = 0
     @State private var isFetchingNextBatch = false
     @State var showPaywall = false
+    
+    // NEW: Track swipes since last break
+    @State private var swipesSinceLastBreak = 0
+    // NEW: Configure how many swipes trigger a break
+    private let swipesPerBreak = 30
     
     // Use NSCache for better memory management
     private let preloadedPlayers: NSCache<NSNumber, CachedPlayer>
@@ -78,7 +85,7 @@ struct SwipeStack: View {
                                 preloadContentForCurrentIndex()
                                 cleanupOldContent()
                                 pauseNonFocusedVideos()
-                                checkForBreak()
+                                // No longer need to check for break here
                             }
                         
                         Spacer() // Push size to left and center the date
@@ -168,7 +175,7 @@ struct SwipeStack: View {
                     } else if !showingBreakView {
                         GeometryReader { geometry in
                             ZStack {
-                                let canSwipe = SwipeData.shared.isPremium || SwipeData.shared.remainingSwipes() > 0
+                                let canSwipe = swipeData.isPremium || swipeData.remainingSwipes() > 0
                                 
                                 ForEach(currentIndex..<min(currentIndex + 2, paginatedMediaItems.count), id: \.self) { index in
                                     if index < paginatedMediaItems.count {
@@ -230,17 +237,26 @@ struct SwipeStack: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             handleAppReturnFromBackground()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .swipeCountChanged)) { _ in
+            // When swipe count changes, force a UI refresh
+            self.refreshToggle.toggle()
+            
+            // This is important: check if the media needs to reload based on new swipe limits
+            DispatchQueue.main.async {
+                self.preloadContentForCurrentIndex()
+                // We don't check for break here anymore
+            }
+        }
         .fullScreenCover(isPresented: $showPaywall) {
             PaywallMaxView()
         }
         .navigationBarHidden(true)
     }
     
-    // Check if we should show the break view
+    // MODIFIED: Check if we should show the break view based on swipe count
     private func checkForBreak() {
-        // Show break view when we've reached the end of the paginated items
-        // But only if we're not at the end of all media items
-        if currentIndex >= paginatedMediaItems.count && currentIndex < mediaItems.count {
+        // Only show break after every swipesPerBreak (30) swipes
+        if swipesSinceLastBreak >= swipesPerBreak {
             // Delay showing break view by a tiny bit to ensure smooth transition
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 withAnimation {
@@ -248,13 +264,23 @@ struct SwipeStack: View {
                 }
             }
         }
+        // Continue if we've reached the end of paginated items but still have more media to show
+        else if currentIndex >= paginatedMediaItems.count && currentIndex < mediaItems.count {
+            // Fetch next batch without showing break view
+            fetchNextBatch()
+        }
     }
     
     
     
-    // Fetch next batch of items
+    // MODIFIED: Fetch next batch of items
     private func fetchNextBatch() {
         isFetchingNextBatch = true
+        
+        // Reset swipes since last break when continuing after a break
+        if showingBreakView {
+            swipesSinceLastBreak = 0
+        }
         
         // Clear current assets to free up memory
         preloadedPlayers.removeAllObjects()
@@ -449,6 +475,9 @@ struct SwipeStack: View {
                     let firstBatchSize = min(self.batchSize, fetchedMedia.count)
                     self.paginatedMediaItems = Array(fetchedMedia.prefix(firstBatchSize))
                     
+                    // Initialize swipesSinceLastBreak to 0
+                    self.swipesSinceLastBreak = 0
+                    
                     self.updateMediaSize()
                     self.updateMediaDate()
                     self.preloadInitialContent()
@@ -506,7 +535,7 @@ struct SwipeStack: View {
         guard currentIndex < paginatedMediaItems.count else {
             // Check if we need to load more from mediaItems
             if currentIndex >= paginatedMediaItems.count && currentIndex < mediaItems.count {
-                // Instead of loading more, show the break view at batch boundaries
+                // Instead of immediately loading more, check if we should show a break
                 checkForBreak()
             } else if currentIndex >= mediaItems.count && mediaItems.count > 0 {
                 // Loop back to beginning
@@ -684,9 +713,9 @@ struct SwipeStack: View {
         }
     }
     
-    // Modified handleSwipe to track previous indices
+    // MODIFIED: handleSwipe to track both swipes and swipes since last break
     func handleSwipe(direction: SwipeDirection) {
-        guard SwipeData.shared.isPremium || SwipeData.shared.remainingSwipes() > 0 else {
+        guard swipeData.isPremium || swipeData.remainingSwipes() > 0 else {
             UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
             showPaywall = true
             return
@@ -711,7 +740,11 @@ struct SwipeStack: View {
                 previousIndices.removeFirst()
             }
             
-            SwipeData.shared.incrementSwipeCount()
+            // Use SwipeData to increment swipe count
+            swipeData.incrementSwipeCount()
+            
+            // IMPORTANT: Increment the swipes since last break counter
+            swipesSinceLastBreak += 1
             
             let feedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
             feedbackGenerator.prepare()
@@ -727,8 +760,13 @@ struct SwipeStack: View {
             currentIndex += 1
             
             self.cleanupOldContent()
-            self.preloadContentForCurrentIndex()
-            self.checkForBreak()
+            
+            // Check if we've reached the swipes per break limit
+            if self.swipesSinceLastBreak >= self.swipesPerBreak {
+                self.showingBreakView = true
+            } else {
+                self.preloadContentForCurrentIndex()
+            }
         }
     }
     
@@ -743,6 +781,7 @@ struct SwipeStack: View {
             }
         }
     }
+    
     
     func updateMediaSize() {
         guard currentIndex < paginatedMediaItems.count else { return }

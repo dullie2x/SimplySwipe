@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		9C894B7D2D9F33F100C90C07 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = 9C894B7C2D9F33F100C90C07 /* GoogleMobileAds */; };
 		9CAE628D2DA1D96F00B30CE3 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9CAE628C2DA1D96F00B30CE3 /* StoreKit.framework */; };
-		9CAE62992DA1EB0200B30CE3 /* tets.plist in Resources */ = {isa = PBXBuildFile; fileRef = 9CAE62982DA1EB0200B30CE3 /* tets.plist */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -34,7 +33,6 @@
 		9C673B952D1881B700BEA4F3 /* Swipe or KeepTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Swipe or KeepTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		9C673B9F2D1881B700BEA4F3 /* Swipe or KeepUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Swipe or KeepUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		9CAE628C2DA1D96F00B30CE3 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.4.sdk/System/Library/Frameworks/StoreKit.framework; sourceTree = DEVELOPER_DIR; };
-		9CAE62982DA1EB0200B30CE3 /* tets.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = tets.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -85,7 +83,6 @@
 		9C673B7B2D1881B500BEA4F3 = {
 			isa = PBXGroup;
 			children = (
-				9CAE62982DA1EB0200B30CE3 /* tets.plist */,
 				9C673B862D1881B500BEA4F3 /* Swipe or Keep */,
 				9C673B982D1881B700BEA4F3 /* Swipe or KeepTests */,
 				9C673BA22D1881B700BEA4F3 /* Swipe or KeepUITests */,
@@ -236,7 +233,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				9CAE62992DA1EB0200B30CE3 /* tets.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -430,7 +426,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Swipe or Keep/Swipe_or_Keep.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 10;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"Swipe or Keep/Preview Content\"";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -440,7 +436,6 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Simply Swipe";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs access to your photo library to display and manage your photos and videos.";
-				INFOPLIST_KEY_NSUserTrackingUsageDescription = "This identifier will be used to deliver personalized ads to you.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -480,7 +475,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Swipe or Keep/Swipe_or_Keep.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 10;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"Swipe or Keep/Preview Content\"";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -490,7 +485,6 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Simply Swipe";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs access to your photo library to display and manage your photos and videos.";
-				INFOPLIST_KEY_NSUserTrackingUsageDescription = "This identifier will be used to deliver personalized ads to you.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;

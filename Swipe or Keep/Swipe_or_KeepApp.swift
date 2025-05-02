@@ -25,8 +25,8 @@ struct Swipe_or_KeepApp: App {
 class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
     // Rewarded ad
     var rewardedAd: RewardedAd?
-    let rewardedAdUnitID = "ca-app-pub-3940256099942544/1712485313" // Test ad ID
-    // let rewardedAdUnitID = "ca-app-pub-3883739672732267/8875385644" // Production ad ID
+//    let rewardedAdUnitID = "ca-app-pub-3940256099942544/1712485313" // Test ad ID
+     let rewardedAdUnitID = "ca-app-pub-3883739672732267/8875385644" // Production ad ID
 
     // Tracking for ad presentation
     @Published var rewardEarned = false
