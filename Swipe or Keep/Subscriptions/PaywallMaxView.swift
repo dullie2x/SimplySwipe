@@ -6,11 +6,13 @@ struct PaywallMaxView: View {
     @State private var animate = false
     @State private var showAdView = false
     @State private var showingTermsOfUse = false
+    @State private var showingPrivacyPolicy = false
     @State private var isRestoring = false
     
     @ObservedObject private var storeManager = StoreKitManager.shared
     
     private let termsOfUseURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
+    private let privacyPolicyURL = URL(string: "https://www.ariestates.com/simply-swipe")!
 
     var body: some View {
         ZStack {
@@ -159,13 +161,27 @@ struct PaywallMaxView: View {
                             }
                         }
 
-                        Text("Terms of Use")
-                            .font(.system(size: 14))
-                            .foregroundColor(.black)
-                            .underline()
-                            .onTapGesture {
-                                showingTermsOfUse = true
-                            }
+                        HStack(spacing: 10) {
+                            Text("Terms of Use")
+                                .font(.system(size: 14))
+                                .foregroundColor(.black)
+                                .underline()
+                                .onTapGesture {
+                                    showingTermsOfUse = true
+                                }
+                            
+                            Text("•")
+                                .font(.system(size: 14))
+                                .foregroundColor(.black)
+                            
+                            Text("Privacy Policy")
+                                .font(.system(size: 14))
+                                .foregroundColor(.black)
+                                .underline()
+                                .onTapGesture {
+                                    showingPrivacyPolicy = true
+                                }
+                        }
                     }
                     .padding(.top, 40)
 
@@ -194,6 +210,9 @@ struct PaywallMaxView: View {
         }
         .sheet(isPresented: $showingTermsOfUse) {
             SafariView(url: termsOfUseURL)
+        }
+        .sheet(isPresented: $showingPrivacyPolicy) {
+            SafariView(url: privacyPolicyURL)
         }
         .interactiveDismissDisabled(true)
     }

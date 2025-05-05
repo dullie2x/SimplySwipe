@@ -6,7 +6,7 @@ struct SettingsView: View {
     @State private var showingPrivacyPolicy = false
     @State private var showingTermsOfUse = false
     
-    private let privacyPolicyURL = URL(string: "https://www.ariestates.com/swipewipe")!
+    private let privacyPolicyURL = URL(string: "https://www.ariestates.com/simply-swipe")!
     private let termsOfUseURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
     
     var body: some View {

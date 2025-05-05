@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 import Photos
 
 struct UserView: View {
@@ -56,7 +57,10 @@ struct UserView: View {
                         }
                         
                         Button(action: {
-                            // Rate app
+                            // Get the current active scene
+                            if let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene {
+                                SKStoreReviewController.requestReview(in: scene)
+                            }
                         }) {
                             statActionCard(icon: "star.fill", title: "Rate This App")
                         }
