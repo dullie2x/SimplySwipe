@@ -113,7 +113,3 @@ struct SafariView: UIViewControllerRepresentable {
         // No update needed
     }
 }
-
-#Preview {
-    SettingsView()
-}

@@ -1,5 +1,6 @@
 import SwiftUI
 import Photos
+import StoreKit
 
 struct TrashView: View {
     @ObservedObject var swipedMediaManager = SwipedMediaManager.shared
@@ -12,18 +13,16 @@ struct TrashView: View {
     @State private var showFeedback = false
     @State private var feedbackMessage = ""
     @State private var feedbackIsSuccess = true
-    
-    // Theme colors based on the app's design
-    private let gradientStart = Color(red: 0.2, green: 0.6, blue: 0.3) // Green
-    private let gradientEnd = Color(red: 0.2, green: 0.4, blue: 0.8) // Blue
-    private let deleteColor = Color(red: 0.8, green: 0.2, blue: 0.2) // Red from Years button
-    private let accentColor = Color(red: 0.8, green: 0.6, blue: 0.2) // Gold from Albums button
-    
-    // MARK: - Main View
+    @State private var showRatingPrompt = false
+
+    private let gradientStart = Color(red: 0.2, green: 0.6, blue: 0.3)
+    private let gradientEnd = Color(red: 0.2, green: 0.4, blue: 0.8)
+    private let deleteColor = Color(red: 0.8, green: 0.2, blue: 0.2)
+    private let accentColor = Color(red: 0.8, green: 0.6, blue: 0.2)
+
     var body: some View {
-        NavigationView { // Using NavigationView instead of NavigationStack for iOS 15
+        NavigationView {
             ZStack {
-                // Background gradient matching app theme
                 LinearGradient(
                     gradient: Gradient(colors: [Color.black, Color.black.opacity(0.9)]),
                     startPoint: .top,
@@ -31,13 +30,13 @@ struct TrashView: View {
                 )
                 .ignoresSafeArea()
                 
+
                 if swipedMediaManager.trashedMediaAssets.isEmpty {
                     emptyStateView
                 } else {
                     contentView
                 }
-                
-                // Feedback Toast
+
                 if showFeedback {
                     feedbackToast
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -50,7 +49,8 @@ struct TrashView: View {
                     if !swipedMediaManager.trashedMediaAssets.isEmpty {
                         Button(action: toggleSelectionMode) {
                             Text(isSelectionMode ? "Cancel" : "Select")
-                            .font(.system(size: 20, weight: .bold, design: .rounded))                        }
+                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                        }
                         .buttonStyle(.plain)
                         .foregroundColor(.white)
                         .disabled(isDeleting || isRecovering)
@@ -65,7 +65,7 @@ struct TrashView: View {
                     onClose: { selectedAssetForFullScreen = nil }
                 )
             }
-            .actionSheet(isPresented: $showConfirmationDialog) { // Using actionSheet instead of confirmationDialog for iOS 15
+            .actionSheet(isPresented: $showConfirmationDialog) {
                 ActionSheet(
                     title: Text("Are you sure you want to delete these items?"),
                     message: Text("These items will be added to your 'Recently Deleted Album'"),
@@ -77,13 +77,29 @@ struct TrashView: View {
                     ]
                 )
             }
-            .disabled(isDeleting || isRecovering)
+            .alert("Enjoying Simply Swipe?", isPresented: $showRatingPrompt) {
+                Button("Yes") {
+                    if let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene {
+                        SKStoreReviewController.requestReview(in: scene)
+                        AppRatingManager.shared.didPromptForRating()
+                        AppRatingManager.shared.markAsRated()
+                    }
+                }
+                Button("Not really") {
+                    if let url = URL(string: "https://forms.gle/f7EyjVj4S5x2yGi27") {
+                        UIApplication.shared.open(url)
+                        AppRatingManager.shared.didPromptForRating()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Would you mind leaving us a quick review?")
+            }
+            .navigationViewStyle(StackNavigationViewStyle())
+            .preferredColorScheme(.dark)
         }
-        .navigationViewStyle(StackNavigationViewStyle()) // Ensure consistent style across devices
-        .preferredColorScheme(.dark)
     }
-    
-    // MARK: - Empty State
+
     private var emptyStateView: some View {
         VStack(spacing: 20) {
             Image(systemName: "trash.slash.fill")
@@ -97,19 +113,18 @@ struct TrashView: View {
                         endPoint: .bottomTrailing
                     )
                 )
-            // Add a subtle scale animation that works on iOS 15
                 .scaleEffect(1.0)
                 .animation(
                     Animation.easeInOut(duration: 1.5)
                         .repeatForever(autoreverses: true),
                     value: UUID()
                 )
-            
+
             Text("No items in Trash")
                 .font(.title3)
                 .fontWeight(.semibold)
                 .foregroundColor(.white)
-            
+
             Text("Items you delete will appear here")
                 .font(.subheadline)
                 .foregroundColor(.gray)
@@ -118,15 +133,14 @@ struct TrashView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
-    // MARK: - Content View
+
     private var contentView: some View {
         VStack(spacing: 0) {
             if isSelectionMode {
                 selectionToolbar
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
-            
+
             ScrollView {
                 LazyVGrid(columns: adaptiveColumns, spacing: 8) {
                     ForEach(swipedMediaManager.trashedMediaAssets, id: \.localIdentifier) { asset in
@@ -143,23 +157,20 @@ struct TrashView: View {
                 }
             }
             .refreshable {
-                // Could implement a refresh action here if needed
                 await refreshTrashContents()
             }
         }
     }
-    
-    
+
     private var gridItemSize: CGFloat {
         let screenWidth = UIScreen.main.bounds.width
         let spacing: CGFloat = 8
         let minItemWidth: CGFloat = 110
         let numColumns = max(1, Int(screenWidth / (minItemWidth + spacing)))
         let totalSpacing = CGFloat(numColumns - 1) * spacing
-        return (screenWidth - totalSpacing - 32) / CGFloat(numColumns) // 32 = horizontal padding
+        return (screenWidth - totalSpacing - 32) / CGFloat(numColumns)
     }
-    
-    // MARK: - Selection Toolbar
+
     private var selectionToolbar: some View {
         HStack(spacing: 20) {
             Button(action: toggleSelectAll) {
@@ -170,9 +181,9 @@ struct TrashView: View {
                 }
                 .foregroundColor(.white)
             }
-            
+
             Spacer()
-            
+
             HStack(spacing: 20) {
                 Button(action: recoverSelected) {
                     HStack(spacing: 6) {
@@ -195,7 +206,7 @@ struct TrashView: View {
                     )
                 }
                 .disabled(selectedItems.isEmpty || isDeleting || isRecovering)
-                
+
                 Button(action: confirmDelete) {
                     HStack(spacing: 6) {
                         if isDeleting {
@@ -217,13 +228,12 @@ struct TrashView: View {
         .padding(.vertical, 12)
         .background(Color.black.opacity(0.8))
     }
-    
-    // MARK: - Feedback Toast
+
     private var feedbackToast: some View {
         HStack {
             Image(systemName: feedbackIsSuccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
                 .foregroundColor(feedbackIsSuccess ? gradientStart : deleteColor)
-            
+
             Text(feedbackMessage)
                 .font(.subheadline)
                 .fontWeight(.medium)
@@ -237,14 +247,12 @@ struct TrashView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .foregroundColor(.white)
     }
-    
-    // MARK: - Adaptive Grid Layout
+
     private var adaptiveColumns: [GridItem] {
         let minItemWidth: CGFloat = 110
         return [GridItem(.adaptive(minimum: minItemWidth), spacing: 8)]
     }
-    
-    // MARK: - Actions
+
     private func handleTapOnAsset(_ asset: PHAsset) {
         if isSelectionMode {
             toggleSelection(for: asset.localIdentifier)
@@ -252,14 +260,14 @@ struct TrashView: View {
             openFullScreen(for: asset)
         }
     }
-    
+
     private func toggleSelectionMode() {
         withAnimation(.spring(response: 0.3)) {
             isSelectionMode.toggle()
             selectedItems.removeAll()
         }
     }
-    
+
     private func toggleSelection(for id: String) {
         withAnimation(.spring(response: 0.2)) {
             if selectedItems.contains(id) {
@@ -270,7 +278,7 @@ struct TrashView: View {
         }
         hapticFeedback(style: .light)
     }
-    
+
     private func toggleSelectAll() {
         withAnimation(.spring(response: 0.3)) {
             if selectedItems.count == swipedMediaManager.trashedMediaAssets.count {
@@ -281,18 +289,18 @@ struct TrashView: View {
         }
         hapticFeedback(style: .medium)
     }
-    
+
     private func confirmDelete() {
         showConfirmationDialog = true
     }
-    
+
     private func performDelete() {
         guard !selectedItems.isEmpty else { return }
-        
+
         isDeleting = true
-        
+
         let assetsToDelete = swipedMediaManager.trashedMediaAssets.filter { selectedItems.contains($0.localIdentifier) }
-        
+
         PHPhotoLibrary.shared().performChanges({
             PHAssetChangeRequest.deleteAssets(assetsToDelete as NSArray)
         }) { success, error in
@@ -303,8 +311,10 @@ struct TrashView: View {
                         swipedMediaManager.deleteItems(with: deletedIdentifiers)
                         selectedItems.removeAll()
                         isSelectionMode = false
-                        
+
                         showFeedback(message: "Items deleted successfully!", isSuccess: true)
+
+                        promptForAppRatingIfNeeded()
                     } else if let error = error {
                         print("Failed to delete assets: \(error)")
                         showFeedback(message: "Failed to delete items", isSuccess: false)
@@ -314,61 +324,68 @@ struct TrashView: View {
             }
         }
     }
-    
+
     private func recoverSelected() {
         guard !selectedItems.isEmpty else { return }
-        
+
         isRecovering = true
-        
-        // Capture selectedItems to use in background
         let itemsToRecover = selectedItems
-        
+
         Task {
-            // Call the actor-isolated method properly
             await MainActor.run {
                 swipedMediaManager.recoverItems(with: itemsToRecover)
             }
-            
-            // Update UI on the main thread
+
             await MainActor.run {
                 withAnimation {
                     let count = itemsToRecover.count
                     selectedItems.removeAll()
                     isRecovering = false
                     isSelectionMode = false
-                    
+
                     showFeedback(message: "\(count) \(count == 1 ? "item" : "items") recovered", isSuccess: true)
+                    promptForAppRatingIfNeeded()
                 }
             }
         }
     }
-    
+
+    private func promptForAppRatingIfNeeded() {
+        AppRatingManager.shared.registerUserAction()
+
+        if AppRatingManager.shared.shouldPromptForRating() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                showRatingPrompt = true
+                // The following line ensures the AppRatingManager knows we showed the prompt
+                AppRatingManager.shared.didPromptForRating()
+            }
+        }
+    }
+
     private func openFullScreen(for asset: PHAsset) {
         selectedAssetForFullScreen = asset
     }
-    
+
     private func showFeedback(message: String, isSuccess: Bool) {
         feedbackMessage = message
         feedbackIsSuccess = isSuccess
-        
+
         withAnimation(.spring(response: 0.3)) {
             showFeedback = true
         }
-        
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
             withAnimation(.spring(response: 0.3)) {
                 showFeedback = false
             }
         }
     }
-    
+
     private func hapticFeedback(style: UIImpactFeedbackGenerator.FeedbackStyle) {
         UIImpactFeedbackGenerator(style: style).impactOccurred()
     }
-    
+
     private func refreshTrashContents() async {
-        // Simulating a refresh operation
-        // You could implement actual refresh logic here
         try? await Task.sleep(nanoseconds: 1_000_000_000)
     }
 }
