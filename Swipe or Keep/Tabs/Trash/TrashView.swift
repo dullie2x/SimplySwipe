@@ -312,7 +312,7 @@ struct TrashView: View {
                         selectedItems.removeAll()
                         isSelectionMode = false
 
-                        showFeedback(message: "Items deleted successfully!", isSuccess: true)
+                        showFeedback(message: "Items Added to Recently Deleted Folder!", isSuccess: true)
 
                         promptForAppRatingIfNeeded()
                     } else if let error = error {
