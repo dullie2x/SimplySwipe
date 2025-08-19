@@ -113,8 +113,9 @@ struct FullScreenMediaView: View {
                             .font(.subheadline)
                             .foregroundColor(.white)
                         
-                        if let asset = allAssets[safe: currentIndex], asset.mediaType == .video {
-                            Text(timeString(from: asset.duration))
+                        // Fixed: Remove the 'safe:' label
+                        if currentIndex < allAssets.count, allAssets[currentIndex].mediaType == .video {
+                            Text(timeString(from: allAssets[currentIndex].duration))
                                 .font(.caption)
                                 .foregroundColor(.gray)
                         }
@@ -122,8 +123,8 @@ struct FullScreenMediaView: View {
                     
                     Spacer()
                     
-                    // Video controls
-                    if let asset = allAssets[safe: currentIndex], asset.mediaType == .video, let player = videoPlayers[currentIndex] {
+                    // Video controls - Fixed: Remove the 'safe:' label
+                    if currentIndex < allAssets.count, allAssets[currentIndex].mediaType == .video, let player = videoPlayers[currentIndex] {
                         HStack(spacing: 20) {
                             // Play/Pause button
                             Button(action: {
@@ -515,9 +516,9 @@ struct FullScreenMediaView: View {
     }
 }
 
-// Extension to safely access array elements
-extension Array {
-    subscript(safe index: Index) -> Element? {
-        indices.contains(index) ? self[index] : nil
-    }
-}
+//// Extension to safely access array elements
+//extension Array {
+//    subscript(safe index: Index) -> Element? {
+//        return indices.contains(index) ? self[index] : nil
+//    }
+//}

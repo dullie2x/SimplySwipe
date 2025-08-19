@@ -28,7 +28,7 @@ class MediaManager {
             }
         }
     }
-
+    
     
     func updateMediaSize(for media: [PHAsset], index: Int) -> String {
         guard index < media.count else { return "0 MB" }
@@ -57,9 +57,9 @@ class MediaManager {
         
         // Reduced from 1920x1080 to 1080x1080 to save memory while maintaining quality
         manager.requestImage(for: asset,
-                            targetSize: CGSize(width: 1080, height: 1080),
-                            contentMode: .aspectFit,
-                            options: options) { result, _ in
+                             targetSize: CGSize(width: 1080, height: 1080),
+                             contentMode: .aspectFit,
+                             options: options) { result, _ in
             DispatchQueue.main.async {
                 completion(index, result)
             }
@@ -79,9 +79,9 @@ class MediaManager {
             // Process all thumbnails first as they're critical for UI responsiveness
             for (index, asset) in media.enumerated() {
                 manager.requestImage(for: asset,
-                                    targetSize: CGSize(width: 300, height: 300),
-                                    contentMode: .aspectFill,
-                                    options: options) { result, _ in
+                                     targetSize: CGSize(width: 300, height: 300),
+                                     contentMode: .aspectFill,
+                                     options: options) { result, _ in
                     if let result = result {
                         DispatchQueue.main.async {
                             completion(index, result)
@@ -153,15 +153,6 @@ class MediaManager {
                     cachedPlayer.player.volume = 0.0
                 }
             }
-        }
-    }
-    
-    func initializeAudioSession() {
-        do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
-            try AVAudioSession.sharedInstance().setActive(true)
-        } catch {
-            print("Failed to initialize audio session: \(error)")
         }
     }
 }

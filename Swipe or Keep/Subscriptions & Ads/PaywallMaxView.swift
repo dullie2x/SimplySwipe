@@ -205,7 +205,10 @@ struct PaywallMaxView: View {
                 dismiss()
             }
         }
-        .fullScreenCover(isPresented: $showAdView) {
+        .fullScreenCover(isPresented: $showAdView, onDismiss: {
+            SwipeData.shared.refreshFromUserDefaults()
+            dismiss()
+        }) {
             AdView()
         }
         .sheet(isPresented: $showingTermsOfUse) {
@@ -228,4 +231,8 @@ struct PaywallMaxView: View {
         case .extraSwipes: return "$0.99 One-Time"
         }
     }
+}
+
+#Preview {
+    PaywallMaxView()
 }

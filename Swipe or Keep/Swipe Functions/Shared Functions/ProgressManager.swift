@@ -71,6 +71,7 @@ actor ProgressManager {
     }
     
     // Get progress for years
+    // Replace your existing getYearProgress function with this:
     func getYearProgress(for years: [String]) async -> [String: Double] {
         // Skip calculation if no swiped media
         let swipeCount = await MainActor.run { SwipedMediaManager.shared.swipeCount }
@@ -94,12 +95,51 @@ actor ProgressManager {
                 group.addTask {
                     let progress = await withCheckedContinuation { continuation in
                         DispatchQueue.global(qos: .userInitiated).async {
-                            // Use Task to hop to MainActor to access shared property
+                            // Determine if this is a full year (e.g., "2021") or month-year (e.g., "Jan '21")
+                            let isFullYear = year.count == 4 && Int(year) != nil
+                            
+                            let fetchOptions = PHFetchOptions()
+                            fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+                            
+                            let allAssets = PHAsset.fetchAssets(with: fetchOptions)
+                            
+                            // Use Task to hop to MainActor to get swiped identifiers
                             Task {
-                                let result = await MainActor.run {
-                                    SwipedMediaManager.shared.calculateProgress(forYear: year)
+                                let swipedIdentifiers = await MainActor.run {
+                                    SwipedMediaManager.shared.getSwipedMediaIdentifiers()
                                 }
-                                continuation.resume(returning: result)
+                                
+                                var totalCount = 0
+                                var swipedCount = 0
+                                let calendar = Calendar.current
+                                
+                                // Count assets for this year/month-year
+                                PHAssetBatchProcessor.processBatched(fetchResult: allAssets, batchSize: 500) { asset in
+                                    guard let creationDate = asset.creationDate else { return }
+                                    
+                                    let matches: Bool
+                                    if isFullYear {
+                                        // Full year matching (e.g., "2021")
+                                        let assetYear = calendar.component(.year, from: creationDate)
+                                        matches = String(assetYear) == year
+                                    } else {
+                                        // Month-year matching (e.g., "Jan '21")
+                                        let dateFormatter = DateFormatter()
+                                        dateFormatter.dateFormat = "MMM ''yy"
+                                        let formattedDate = dateFormatter.string(from: creationDate)
+                                        matches = formattedDate == year
+                                    }
+                                    
+                                    if matches {
+                                        totalCount += 1
+                                        if swipedIdentifiers.contains(asset.localIdentifier) {
+                                            swipedCount += 1
+                                        }
+                                    }
+                                }
+                                
+                                let progressValue = totalCount > 0 ? Double(swipedCount) / Double(totalCount) : 0.0
+                                continuation.resume(returning: progressValue)
                             }
                         }
                     }

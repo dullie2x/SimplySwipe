@@ -51,7 +51,8 @@ struct UserView: View {
                             statCard(
                                 icon: "plus.circle",
                                 title: "Extra Swipes",
-                                value: "\(UserDefaults.standard.integer(forKey: "extraSwipes"))",
+                                value: "\(swipeData.extraSwipes)"
+,
                                 highlight: true
                             )
                         }
@@ -84,9 +85,9 @@ struct UserView: View {
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(Color.green)
+                                .background(Color.blue)
                                 .cornerRadius(12)
-                                .shadow(color: Color.green.opacity(0.5), radius: 5, x: 0, y: 2)
+                                .shadow(color: Color.blue.opacity(0.5), radius: 5, x: 0, y: 2)
                             }
                             .padding(.horizontal, 30)
                         }
@@ -195,7 +196,7 @@ struct UserView: View {
         HStack {
             Image(systemName: icon)
                 .font(.system(size: 24))
-                .foregroundColor(.green)
+                .foregroundColor(.blue)
                 .frame(width: 40)
             
             Text(title)
@@ -220,7 +221,7 @@ struct UserView: View {
         HStack {
             Image(systemName: icon)
                 .font(.system(size: 24))
-                .foregroundColor(.green)
+                .foregroundColor(.blue)
                 .frame(width: 40)
             
             Text(title)
@@ -231,7 +232,7 @@ struct UserView: View {
             
             Text(value)
                 .font(.system(size: 18, weight: .bold))
-                .foregroundColor(title == "Swipes Remaining" || title == "Extra Swipes" ? .green : (highlight ? .green : .gray))
+                .foregroundColor(title == "Swipes Remaining" || title == "Extra Swipes" ? .blue : (highlight ? .blue : .gray))
         }
         .padding(.vertical, 16)
         .padding(.horizontal, 20)

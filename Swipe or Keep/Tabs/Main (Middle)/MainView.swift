@@ -18,7 +18,7 @@ struct MainView: View {
                         .font(.system(size: 38, weight: .heavy, design: .rounded))
                         .foregroundColor(.white)
                         .padding(.top, 20)
-                        .padding(.bottom, 10)
+                        .padding(.bottom, 1)
                     
                     // Navigation Blocks
                     NavStackedBlocksView(

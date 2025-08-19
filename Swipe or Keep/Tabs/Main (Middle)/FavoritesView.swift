@@ -47,7 +47,8 @@ struct FavoritesView: View {
                 }
                 .padding(32)
             } else {
-                FilteredSwipeStack(filterOptions: getFavoriteFilterOptions())
+                // UPDATED: Use FilteredVertScroll instead of FilteredSwipeStack
+                FilteredVertScroll(filterOptions: getFavoriteFilterOptions())
             }
             
             Spacer()

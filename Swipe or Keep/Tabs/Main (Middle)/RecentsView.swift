@@ -47,7 +47,8 @@ struct RecentsView: View {
                 }
                 .padding(32)
             } else {
-                FilteredSwipeStack(filterOptions: getRecentFilterOptions())
+                // UPDATED: Use FilteredVertScroll instead of FilteredSwipeStack
+                FilteredVertScroll(filterOptions: getRecentFilterOptions())
             }
             
             Spacer()

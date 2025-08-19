@@ -1,20 +1,19 @@
 import Foundation
 import Combine
 
+
+// MARK: - SwipeData Singleton
 class SwipeData: ObservableObject {
     @Published var swipeCount: Int {
         didSet {
             UserDefaults.standard.set(swipeCount, forKey: "swipeCount")
-            // Post notification when swipeCount changes
             NotificationCenter.default.post(name: .swipeCountChanged, object: nil)
         }
     }
-    
-    // Add a published property for extraSwipes
+
     @Published var extraSwipes: Int {
         didSet {
             UserDefaults.standard.set(extraSwipes, forKey: "extraSwipes")
-            // Post notification when extraSwipes changes
             NotificationCenter.default.post(name: .swipeCountChanged, object: nil)
         }
     }
@@ -22,14 +21,13 @@ class SwipeData: ObservableObject {
     @Published var isPremium: Bool = false
     private var cancellables = Set<AnyCancellable>()
 
-    static let shared: SwipeData = SwipeData()
+    static let shared = SwipeData()
 
     private init() {
         self.swipeCount = UserDefaults.standard.integer(forKey: "swipeCount")
         self.extraSwipes = UserDefaults.standard.integer(forKey: "extraSwipes")
         self.isPremium = StoreKitManager.shared.isPremium
 
-        // Observe premium status
         StoreKitManager.shared.$isPremium
             .receive(on: RunLoop.main)
             .assign(to: \.isPremium, on: self)
@@ -38,61 +36,74 @@ class SwipeData: ObservableObject {
         resetIfNeeded()
     }
 
+    // MARK: - Swipe Handling
     func incrementSwipeCount() {
-        // Check if we need to handle swipe limits
         if !isPremium && swipeCount >= 50 {
-            // Use extra swipes first if available
             if extraSwipes > 0 {
                 extraSwipes -= 1
                 print("Used 1 extra swipe. Remaining: \(extraSwipes)")
             }
         }
-        
-        // Always increment the swipe count regardless of premium status
+
         swipeCount += 1
+
+        if swipeCount > 0 {
+            markSwipesUsed()
+        }
     }
-    
-    // Add method to add extra swipes (for purchases and ads)
+
     func addExtraSwipes(_ count: Int) {
         extraSwipes += count
     }
-    
-    // Add method to refresh values from UserDefaults
+
     func refreshFromUserDefaults() {
         let newExtraSwipes = UserDefaults.standard.integer(forKey: "extraSwipes")
         if newExtraSwipes != extraSwipes {
             extraSwipes = newExtraSwipes
         }
-        
+
         let newSwipeCount = UserDefaults.standard.integer(forKey: "swipeCount")
         if newSwipeCount != swipeCount {
             swipeCount = newSwipeCount
         }
-        
-        // Post notification to update UI
+
         NotificationCenter.default.post(name: .swipeCountChanged, object: nil)
     }
-    
+
+    // MARK: - Daily Reset Using Keychain
     func resetIfNeeded() {
         let today = Calendar.current.startOfDay(for: Date())
-        let lastResetDate = UserDefaults.standard.object(forKey: "lastSwipeResetDate") as? Date ?? .distantPast
+
+        let lastResetString = KeychainHelper.get(forKey: "lastSwipeResetDate")
+        let lastResetDate = lastResetString.flatMap { ISO8601DateFormatter().date(from: $0) } ?? .distantPast
 
         if !Calendar.current.isDate(today, inSameDayAs: lastResetDate) {
             swipeCount = 0
-            UserDefaults.standard.set(today, forKey: "lastSwipeResetDate")
+            let todayString = ISO8601DateFormatter().string(from: today)
+            KeychainHelper.save(todayString, forKey: "lastSwipeResetDate")
             print("Swipe count reset for new day.")
         }
     }
 
+    // MARK: - Remaining Swipes
     func remainingSwipes() -> Int {
         if isPremium { return .max }
 
         let base = max(0, 50 - swipeCount)
         return base + extraSwipes
     }
+
+    // MARK: - Optional: Track if Free Swipes Ever Used
+    var hasUsedFreeSwipes: Bool {
+        return KeychainHelper.get(forKey: "hasUsedFreeSwipes") == "true"
+    }
+
+    func markSwipesUsed() {
+        KeychainHelper.save("true", forKey: "hasUsedFreeSwipes")
+    }
 }
 
-// Custom notification name for SwipeData changes
+// MARK: - Notification for UI Updates
 extension Notification.Name {
     static let swipeCountChanged = Notification.Name("swipeCountChanged")
 }

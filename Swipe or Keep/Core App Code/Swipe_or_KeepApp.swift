@@ -1,22 +1,25 @@
 import SwiftUI
 import GoogleMobileAds
 import StoreKit
+import AVFoundation
 
 @main
 struct Swipe_or_KeepApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var showSplash = true
-    
+
     init() {
-        // Force dark mode throughout the app
+        // Force dark mode
         UIView.appearance().overrideUserInterfaceStyle = .dark
+
+        // 🔐 Set the reference here
+        AdHelper.shared.appDelegate = appDelegate
     }
-    
+
     var body: some Scene {
         WindowGroup {
             SplashView()
                 .environmentObject(AdHelper.shared)
-
         }
     }
 }
@@ -35,6 +38,10 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+        
+        // Configure audio session to allow background music to continue
+        configureInitialAudioSession()
+        
         MobileAds.shared.start { status in
             print("📱 Google Mobile Ads SDK initialization status: \(status)")
             
@@ -45,11 +52,58 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
         return true
     }
     
+    // MARK: - Audio Session Configuration
+    private func configureInitialAudioSession() {
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            
+            // Set category to playback but don't activate yet - allows background music to continue
+            try audioSession.setCategory(.playback, mode: .moviePlayback, options: [.mixWithOthers])
+            
+            // Don't activate the session yet - this allows background music to continue
+            print("🎵 Audio session configured for video playback but allowing background music")
+            
+        } catch {
+            print("❌ Failed to configure initial audio session: \(error)")
+        }
+    }
+    
+    // Call this method only when user unmutes a video
+    func activateVideoPlayback() {
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            
+            // Activate the session - this will stop background music
+            try audioSession.setActive(true)
+            
+            print("🎬 Audio session activated - background music stopped")
+            
+        } catch {
+            print("❌ Failed to activate audio session: \(error)")
+        }
+    }
+    
+    // Call this method when video is muted
+    func allowBackgroundMusic() {
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            
+            // Deactivate to allow background music to resume
+            try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+            
+            print("🎵 Audio session deactivated - background music can resume")
+            
+        } catch {
+            print("❌ Failed to deactivate audio session: \(error)")
+        }
+    }
+    
     // MARK: - Rewarded Ad
+    // UPDATED FUNCTION
     func loadRewardedAd() {
-        // Prevent multiple simultaneous ad loads
-        if isLoadingAd {
-            print("⚠️ Ad already loading, skipping duplicate request")
+        // Prevent multiple simultaneous ad loads or loading when an ad is already available
+        if isLoadingAd || rewardedAd != nil {
+            print("⚠️ Ad already loading or already loaded, skipping duplicate request")
             return
         }
         
@@ -74,39 +128,45 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
             print("✅ Rewarded ad loaded successfully")
         }
     }
-    
-    // Show rewarded ad with improved handling
+
+    // UPDATED FUNCTION
     func showRewardedAd(from viewController: UIViewController, completion: (() -> Void)? = nil) {
-        self.adDismissedHandler = completion
         self.rewardEarned = false
         
-        if let ad = rewardedAd {
+        // Store the completion handler if provided
+        if let completion = completion {
+            self.adDismissedHandler = completion
+        }
+
+        if let ad = self.rewardedAd {
             print("🎬 Presenting rewarded ad")
             
-            // Present on main thread to avoid potential UI issues
+            // Present on main thread
             DispatchQueue.main.async {
                 ad.present(from: viewController) { [weak self] in
                     guard let self = self else { return }
-                    
-                    // User earned reward
                     print("🎁 User earned reward!")
                     self.rewardEarned = true
                     
-                    // Add the extra swipes
+                    // Grant the reward here only
                     let current = UserDefaults.standard.integer(forKey: "extraSwipes")
                     UserDefaults.standard.set(current + 10, forKey: "extraSwipes")
+                    
+                    // Set ad to nil after use to prevent reuse
+                    self.rewardedAd = nil
                 }
             }
         } else {
-            print("⚠️ Rewarded ad not ready, loading a new one")
-            loadRewardedAd()
-            
-            // Call completion handler with delay to avoid UI glitches
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                completion?()
+            print("⚠️ Rewarded ad not ready")
+            self.loadRewardedAd()
+            // Call the completion handler
+            DispatchQueue.main.async {
+                self.adDismissedHandler?()
+                self.adDismissedHandler = nil
             }
         }
     }
+
     
     // MARK: - GADFullScreenContentDelegate
     func adDidDismissFullScreenContent(_ ad: FullScreenPresentingAd) {

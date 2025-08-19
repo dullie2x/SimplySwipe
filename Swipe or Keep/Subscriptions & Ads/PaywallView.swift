@@ -253,3 +253,7 @@ struct PaywallOption: View {
         .padding(.vertical, highlight ? 5 : 0)
     }
 }
+
+#Preview {
+    PaywallView()
+}

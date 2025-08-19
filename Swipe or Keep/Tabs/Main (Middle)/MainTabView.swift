@@ -25,6 +25,11 @@ struct MainTabView: View {
             // Custom Tab Bar
             CustomTabBar(selectedTab: $selectedTab)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToMainTab)) { _ in
+            withAnimation(.spring()) {
+                selectedTab = .main
+            }
+        }
     }
 }
 
@@ -63,7 +68,7 @@ struct CustomTabBar: View {
             VStack(spacing: 5) { // Add spacing between icon and underline
                 Image(systemName: icon)
                     .font(.system(size: 24))
-                    .foregroundColor(selectedTab == tab ? .white : .green)
+                    .foregroundColor(selectedTab == tab ? .white : .blue)
                 if selectedTab == tab {
                     Color.red
                         .frame(width: 20, height: 2) // Shortened underline
@@ -76,6 +81,7 @@ struct CustomTabBar: View {
         .frame(maxWidth: .infinity)
     }
 }
+
 
 struct MainTabView_Previews: PreviewProvider {
     static var previews: some View {

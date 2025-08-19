@@ -17,13 +17,6 @@ struct SettingsView: View {
                     .foregroundColor(.white)
                     .padding(.top, 12) // Reduced top padding to move it closer to the top
 
-                // Send Feedback
-//                Button(action: {
-//                    // Add feedback link here
-//                }) {
-//                    statActionCard(icon: "message.fill", title: "Send Feedback")
-//                }
-
                 // Reset Swiping Progress
                 Button(action: {
                     showingResetConfirmation = true
@@ -51,7 +44,7 @@ struct SettingsView: View {
             .background(Color.black.edgesIgnoringSafeArea(.all))
         }
         .confirmationDialog(
-            "Reset Swiping Progress",
+            "Please Clear Trash Before Resetting Progress",
             isPresented: $showingResetConfirmation,
             titleVisibility: .visible
         ) {
@@ -74,7 +67,7 @@ struct SettingsView: View {
         HStack {
             Image(systemName: icon)
                 .font(.system(size: 24))
-                .foregroundColor(.green)
+                .foregroundColor(.blue)
                 .frame(width: 40)
 
             Text(title)
