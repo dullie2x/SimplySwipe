@@ -196,7 +196,11 @@ struct FilteredMainContentView: View {
                 viewModel.handleDragChanged(value: value, geometry: geometry, canSwipe: canSwipe)
             }
             .onEnded { value in
-                viewModel.handleDragEnded(value: value, geometry: geometry, canSwipe: canSwipe)
+                viewModel.handleDragEnded(
+                    value: value,
+                    geometry: geometry,
+                    canSwipe: viewModel.swipeData.remainingSwipes() > 0
+                )
             }
     }
 }

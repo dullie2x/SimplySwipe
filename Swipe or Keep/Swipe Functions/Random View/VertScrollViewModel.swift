@@ -141,22 +141,28 @@ class VertScrollViewModel: ObservableObject {
     func updateCurrentMedia() {
         guard let currentAsset = safeCurrentAsset() else { return }
         
+        // Update UI strings
         updateMediaSize()
         updateMediaDate()
         
-        // RESET: Every video starts muted
+        // Every video starts muted
         currentAssetMuted = true
         
         // Set active player with TikTok-style behavior
         cacheManager.setActivePlayer(for: currentAsset, autoPlay: true)
-        
-        // Apply muted state for this asset
         if currentAsset.mediaType == .video {
             cacheManager.updateVolume(for: currentAsset, muted: true)
         }
         
+        // ✅ Ensure the very first/just-shown card is counted as "seen" once.
+        if mediaTracker[currentAsset.localIdentifier]?.hasBeenSeen != true {
+            markCurrentAssetAsSeen()  // NOTE: your mark function does not bump swipeCount
+        }
+        
+        // Preload neighbors
         preloadContentForCurrentIndex()
         
+        // Controls timing
         videoControlState.showControls = true
         videoControlState.resetControlsTimer {
             withAnimation {
@@ -164,6 +170,7 @@ class VertScrollViewModel: ObservableObject {
             }
         }
     }
+
     
     func updateMediaDate() {
         guard let asset = safeCurrentAsset() else {
@@ -287,6 +294,8 @@ class VertScrollViewModel: ObservableObject {
             }
             dragOffset = 0
         case .vertical:
+            // Allow vertical dragging visually even if they can't complete the swipe
+            // The paywall check happens in handleVerticalSwipeEnd
             horizontalOffset = 0
             dragOffset = value.translation.height
         case .undecided:
@@ -299,7 +308,7 @@ class VertScrollViewModel: ObservableObject {
         case .horizontal:
             handleHorizontalSwipeEnd(value: value, geometry: geometry, canSwipe: canSwipe)
         case .vertical:
-            handleVerticalSwipeEnd(value: value, geometry: geometry)
+            handleVerticalSwipeEnd(value: value, geometry: geometry, canSwipe: canSwipe)  // Add canSwipe parameter
         case .undecided:
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                 horizontalOffset = 0
@@ -390,8 +399,23 @@ class VertScrollViewModel: ObservableObject {
         }
     }
     
-    func handleVerticalSwipeEnd(value: DragGesture.Value, geometry: GeometryProxy) {
+    func handleVerticalSwipeEnd(value: DragGesture.Value, geometry: GeometryProxy, canSwipe: Bool) {
         let threshold: CGFloat = geometry.size.height * 0.10
+
+        // Check for swipe attempts that would require consuming a swipe
+        let willConsumeSwipe = abs(value.translation.height) > threshold
+        
+        // If this action will consume a swipe and user can't swipe, show paywall
+        if willConsumeSwipe && !canSwipe {
+            print("No swipes remaining - showing paywall for vertical swipe")
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                dragOffset = 0
+            }
+            // Show the paywall
+            showPaywall = true
+            return
+        }
 
         withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
             if value.translation.height > threshold {
@@ -399,7 +423,16 @@ class VertScrollViewModel: ObservableObject {
                 if previewIndex > maxBackwardIndex {
                     let oldIndex = previewIndex
                     previewIndex -= 1
+                    
+                    // Mark current asset as seen and increment swipe count
+                    markCurrentAssetAsSeen()
+                    swipeData.incrementSwipeCount()
+                    
                     handleIndexChange(from: oldIndex, to: previewIndex)
+                    
+                    // Haptic feedback for successful navigation
+//                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    print("Vertical swipe down: moved to index \(previewIndex)")
                 } else {
                     // Hit the backward limit - double haptic + bounce
                     triggerBackwardLimitFeedback()
@@ -411,6 +444,10 @@ class VertScrollViewModel: ObservableObject {
                     let oldIndex = previewIndex
                     previewIndex += 1
                     
+                    // Mark current asset as seen and increment swipe count
+                    markCurrentAssetAsSeen()
+                    swipeData.incrementSwipeCount()
+                    
                     // Update backward limit as we move forward
                     maxBackwardIndex = max(0, previewIndex - maxBackwardNavigation)
                     
@@ -418,11 +455,15 @@ class VertScrollViewModel: ObservableObject {
                     ensureEnoughContent()
                     
                     handleIndexChange(from: oldIndex, to: previewIndex)
+                    
+                    // Haptic feedback for successful navigation
+//                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    print("Vertical swipe up: moved to index \(previewIndex)")
                 } else {
                     // At the very end - check if we've loaded everything
                     if paginatedMediaItems.count >= mediaItems.count {
                         // We're at the last item of all media - show end of gallery
-                        print("🏁 At the end of all media - showing end of gallery")
+                        print("At the end of all media - showing end of gallery")
                         showEndOfGallery()
                     } else {
                         // Try to load more content
@@ -432,6 +473,23 @@ class VertScrollViewModel: ObservableObject {
             }
             dragOffset = 0
         }
+    }
+    // Add this helper function if it doesn't exist
+    private func markCurrentAssetAsSeen() {
+        guard let currentAsset = safeCurrentAsset() else { return }
+        
+        let id = currentAsset.localIdentifier
+        
+        // Update tracking - mark as seen but not swiped left/right
+        var tracker = mediaTracker[id] ?? MediaItemTracker(identifier: id)
+        tracker.hasBeenSeen = true
+        tracker.lastViewedAt = Date()
+        mediaTracker[id] = tracker
+        
+        // Add this line - let SwipedMediaManager filter it out
+        SwipedMediaManager.shared.addSwipedMedia(currentAsset, toTrash: false)
+        
+        print("Marked asset \(id) as seen via vertical swipe")
     }
     
     func triggerBackwardLimitFeedback() {

@@ -1,6 +1,11 @@
 import Foundation
 import Photos
 
+// MARK: - Progress change notification
+extension Notification.Name {
+    static let progressDidChange = Notification.Name("progressDidChange")
+}
+
 // Actor for thread-safe progress cache management
 actor ProgressManager {
     static let shared = ProgressManager()
@@ -13,123 +18,87 @@ actor ProgressManager {
     // Cache freshness threshold (recalculate after 5 minutes)
     private let cacheFreshnessDuration: TimeInterval = 300 // 5 minutes
     
-    // Background calculation queue
-    private let calculationQueue = DispatchQueue(label: "com.app.progressManager.calculation", qos: .utility)
-    
     private init() {}
-    
-    // Get progress for categories (Recents, Screenshots, Favorites)
+
+    // MARK: - Categories (Recents, Screenshots, Favorites)
     func getCategoryProgress() async -> [Int: Double] {
-        // Skip calculation if no swiped media
-        let swipeCount = await MainActor.run { SwipedMediaManager.shared.swipeCount }
-        if swipeCount == 0 {
-            return [:]
-        }
-        
         var results: [Int: Double] = [:]
-        
+
         for index in 0..<3 {
-            // Check if we have a fresh cache entry
-            if let cachedData = categoryProgressCache[index],
-               Date().timeIntervalSince(cachedData.timestamp) < cacheFreshnessDuration {
-                results[index] = cachedData.progress
+            // Use cached value if still fresh
+            if let cached = categoryProgressCache[index],
+               Date().timeIntervalSince(cached.timestamp) < cacheFreshnessDuration {
+                results[index] = cached.progress
                 continue
             }
-            
-            // Otherwise calculate new value
+
+            // Map index → category
             let category: SwipedMediaManager.MediaCategory
             switch index {
-            case 0:
-                category = .recents
-            case 1:
-                category = .screenshots
-            case 2:
-                category = .favorites
-            default:
-                continue
+            case 0: category = .recents
+            case 1: category = .screenshots
+            case 2: category = .favorites
+            default: continue
             }
-            
-            // Calculate progress using MainActor to access shared property
-            let progress = await withCheckedContinuation { continuation in
-                calculationQueue.async {
-                    // Use Task to hop to the main actor
-                    Task {
-                        let result = await MainActor.run {
-                            SwipedMediaManager.shared.calculateProgress(forCategory: category)
-                        }
-                        continuation.resume(returning: result)
-                    }
-                }
+
+            // Calculate on main (SwipedMediaManager is @MainActor)
+            let progress: Double = await MainActor.run {
+                SwipedMediaManager.shared.calculateProgress(forCategory: category)
             }
-            
-            // Update cache and results
+
             categoryProgressCache[index] = (Date(), progress)
             results[index] = progress
         }
-        
+
         return results
     }
-    
-    // Get progress for years
-    // Replace your existing getYearProgress function with this:
+
+    // MARK: - Years / Month-Years (e.g., "2025" or "Jan '25")
     func getYearProgress(for years: [String]) async -> [String: Double] {
-        // Skip calculation if no swiped media
-        let swipeCount = await MainActor.run { SwipedMediaManager.shared.swipeCount }
-        if swipeCount == 0 || years.isEmpty {
-            return [:]
-        }
-        
+        guard !years.isEmpty else { return [:] }
         var results: [String: Double] = [:]
-        
-        // Process years in parallel for better performance
+
         await withTaskGroup(of: (String, Double).self) { group in
             for year in years {
-                // Check if we have a fresh cache entry
-                if let cachedData = yearProgressCache[year],
-                   Date().timeIntervalSince(cachedData.timestamp) < cacheFreshnessDuration {
-                    results[year] = cachedData.progress
+                // Serve from cache if fresh
+                if let cached = yearProgressCache[year],
+                   Date().timeIntervalSince(cached.timestamp) < cacheFreshnessDuration {
+                    results[year] = cached.progress
                     continue
                 }
-                
-                // Otherwise calculate in parallel
+
                 group.addTask {
-                    let progress = await withCheckedContinuation { continuation in
+                    let progress: Double = await withCheckedContinuation { continuation in
                         DispatchQueue.global(qos: .userInitiated).async {
-                            // Determine if this is a full year (e.g., "2021") or month-year (e.g., "Jan '21")
                             let isFullYear = year.count == 4 && Int(year) != nil
-                            
+
                             let fetchOptions = PHFetchOptions()
                             fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-                            
                             let allAssets = PHAsset.fetchAssets(with: fetchOptions)
-                            
-                            // Use Task to hop to MainActor to get swiped identifiers
+
                             Task {
                                 let swipedIdentifiers = await MainActor.run {
                                     SwipedMediaManager.shared.getSwipedMediaIdentifiers()
                                 }
-                                
+
                                 var totalCount = 0
                                 var swipedCount = 0
                                 let calendar = Calendar.current
-                                
-                                // Count assets for this year/month-year
+                                let df = DateFormatter()
+                                df.dateFormat = "MMM ''yy"
+
                                 PHAssetBatchProcessor.processBatched(fetchResult: allAssets, batchSize: 500) { asset in
                                     guard let creationDate = asset.creationDate else { return }
-                                    
+
                                     let matches: Bool
                                     if isFullYear {
-                                        // Full year matching (e.g., "2021")
                                         let assetYear = calendar.component(.year, from: creationDate)
                                         matches = String(assetYear) == year
                                     } else {
-                                        // Month-year matching (e.g., "Jan '21")
-                                        let dateFormatter = DateFormatter()
-                                        dateFormatter.dateFormat = "MMM ''yy"
-                                        let formattedDate = dateFormatter.string(from: creationDate)
-                                        matches = formattedDate == year
+                                        let formatted = df.string(from: creationDate)
+                                        matches = formatted == year
                                     }
-                                    
+
                                     if matches {
                                         totalCount += 1
                                         if swipedIdentifiers.contains(asset.localIdentifier) {
@@ -137,76 +106,60 @@ actor ProgressManager {
                                         }
                                     }
                                 }
-                                
-                                let progressValue = totalCount > 0 ? Double(swipedCount) / Double(totalCount) : 0.0
-                                continuation.resume(returning: progressValue)
+
+                                let value = totalCount > 0 ? Double(swipedCount) / Double(totalCount) : 0.0
+                                continuation.resume(returning: value)
                             }
                         }
                     }
+
                     return (year, progress)
                 }
             }
-            
-            // Collect results from parallel tasks
+
             for await (year, progress) in group {
                 yearProgressCache[year] = (Date(), progress)
                 results[year] = progress
             }
         }
-        
+
         return results
     }
-    
-    // Get progress for albums
+
+    // MARK: - Albums
     func getAlbumProgress(for folders: [PHAssetCollection]) async -> [String: Double] {
-        // Skip calculation if no swiped media
-        let swipeCount = await MainActor.run { SwipedMediaManager.shared.swipeCount }
-        if swipeCount == 0 || folders.isEmpty {
-            return [:]
-        }
-        
+        guard !folders.isEmpty else { return [:] }
         var results: [String: Double] = [:]
-        
-        // Process albums in parallel for better performance
+
         await withTaskGroup(of: (String, Double).self) { group in
             for folder in folders {
                 guard let title = folder.localizedTitle else { continue }
-                
-                // Check if we have a fresh cache entry
-                if let cachedData = albumProgressCache[title],
-                   Date().timeIntervalSince(cachedData.timestamp) < cacheFreshnessDuration {
-                    results[title] = cachedData.progress
+
+                // Cache hit
+                if let cached = albumProgressCache[title],
+                   Date().timeIntervalSince(cached.timestamp) < cacheFreshnessDuration {
+                    results[title] = cached.progress
                     continue
                 }
-                
-                // Otherwise calculate in parallel
+
                 group.addTask {
-                    let progress = await withCheckedContinuation { continuation in
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            // Create a Task to hop to the main actor when accessing SwipedMediaManager.shared
-                            Task {
-                                let result = await MainActor.run {
-                                    SwipedMediaManager.shared.calculateProgress(for: folder)
-                                }
-                                continuation.resume(returning: result)
-                            }
-                        }
+                    let progress: Double = await MainActor.run {
+                        SwipedMediaManager.shared.calculateProgress(for: folder)
                     }
                     return (title, progress)
                 }
             }
-            
-            // Collect results from parallel tasks
+
             for await (title, progress) in group {
                 albumProgressCache[title] = (Date(), progress)
                 results[title] = progress
             }
         }
-        
+
         return results
     }
-    
-    // Method to invalidate all caches
+
+    // MARK: - Cache invalidation (+ notify UI to refresh)
     func invalidateCache(forYear year: String? = nil, forAlbum album: String? = nil, forCategory index: Int? = nil) {
         if let year = year {
             yearProgressCache.removeValue(forKey: year)
@@ -220,10 +173,15 @@ actor ProgressManager {
             albumProgressCache.removeAll()
             categoryProgressCache.removeAll()
         }
+
+        // Tell the app that progress changed so views can re-fetch immediately
+        Task { @MainActor in
+            NotificationCenter.default.post(name: .progressDidChange, object: nil)
+        }
     }
 }
 
-// Instead of extending PHFetchResult, create a utility class for pagination
+// MARK: - PHAssetBatchProcessor (unchanged)
 class PHAssetBatchProcessor {
     // Get a page of PHAssets from a fetch result
     static func getPage(from fetchResult: PHFetchResult<PHAsset>, offset: Int, pageSize: Int) -> [PHAsset] {

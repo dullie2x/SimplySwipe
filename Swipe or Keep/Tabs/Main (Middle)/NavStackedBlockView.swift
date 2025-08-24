@@ -77,6 +77,7 @@ struct NavStackedBlocksView: View {
     // Use shared data manager instead of local state
     @StateObject private var dataManager = MediaDataManager.shared
 
+
     var body: some View {
         NavigationView {
             ScrollView(.vertical, showsIndicators: false) {
@@ -109,12 +110,16 @@ struct NavStackedBlocksView: View {
             }
             // Removed .onAppear - data is already loaded!
         }
-        .fullScreenCover(item: $selectedIndex) { item in
+        .fullScreenCover(item: $selectedIndex, onDismiss: {
+            Task { await refreshProgress() }
+        }) { item in
             destinationView(for: item.value)
         }
+
         .fullScreenCover(isPresented: $isFolderSelected, onDismiss: {
             areFolderAssetsReady = false
             selectedFolderAssets = []
+            Task { await refreshProgress() }
         }) {
             if areFolderAssetsReady {
                 FilteredVertScroll(filterOptions: createFolderFilterOptions())
@@ -124,9 +129,11 @@ struct NavStackedBlocksView: View {
                 }
             }
         }
+
         .fullScreenCover(isPresented: $isYearSelected, onDismiss: {
             areYearAssetsReady = false
             selectedYearAssets = []
+            Task { await refreshProgress() }
         }) {
             if areYearAssetsReady {
                 FilteredVertScroll(filterOptions: createYearFilterOptions())
@@ -137,7 +144,6 @@ struct NavStackedBlocksView: View {
             }
         }
     }
-    
     // MARK: - Search Bar View
     private func searchBarView() -> some View {
         VStack(spacing: 16) {
@@ -677,16 +683,18 @@ struct NavStackedBlocksView: View {
     
     // MARK: - Apple-style Category Block (updated to use dataManager)
     private func appleCategoryBlock(index: Int) -> some View {
-        RoundedRectangle(cornerRadius: 12)
+        let progress = dataManager.categoryProgress[index] ?? 0
+        let done = progress >= 0.999
+
+        return RoundedRectangle(cornerRadius: 12)
             .fill(Color.gray.opacity(0.15))
             .frame(height: 200)
             .overlay(
                 ZStack {
-                    // Background preview images from dataManager
+                    // background (unchanged)
                     if let previewImages = dataManager.sectionPreviewImages[index], !previewImages.isEmpty {
                         photoPreviewGrid(images: previewImages)
                     } else {
-                        // Fallback gradient background
                         RoundedRectangle(cornerRadius: 12)
                             .fill(LinearGradient(
                                 gradient: Gradient(colors: gradientColors(for: index)),
@@ -695,8 +703,8 @@ struct NavStackedBlocksView: View {
                             ))
                             .opacity(0.7)
                     }
-                    
-                    // Dark overlay for text readability
+
+                    // dark overlay (unchanged)
                     RoundedRectangle(cornerRadius: 12)
                         .fill(
                             LinearGradient(
@@ -709,47 +717,61 @@ struct NavStackedBlocksView: View {
                                 endPoint: .top
                             )
                         )
-                    
-                    // Content overlay
+
+                    // content (unchanged) -> this still draws the percent bottom-right
                     VStack {
                         Spacer()
-                        HStack {
+                        HStack(alignment: .bottom) {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(blockTitles[index])
                                     .foregroundColor(.white)
                                     .font(.system(size: 28, weight: .bold, design: .rounded))
-                                
                                 Text(getSubtitleText(for: index))
                                     .foregroundColor(.white.opacity(0.8))
                                     .font(.system(size: 16, weight: .medium))
                             }
-                            
                             Spacer()
-                            
-                            // Progress indicator from dataManager
-                            if let progress = dataManager.categoryProgress[index], progress > 0 {
-                                CircularProgressView(progress: progress, gradient: [Color.white.opacity(0.8), Color.white.opacity(0.6)])
+                            if progress > 0 {
+                                CircularProgressView(
+                                    progress: progress,
+                                    gradient: [Color.white.opacity(0.8), Color.white.opacity(0.6)]
+                                )
                             }
                         }
                         .padding(20)
                     }
                 }
             )
+            // add blur on top *when done*
+            .overlay(doneOverlay(done))
+            .overlay(alignment: .bottomLeading) { if done { Text(blockTitles[index]).font(.system(size: 20, weight: .semibold)).foregroundColor(.white).padding(20) } }
+            // re-draw the percent above the blur so it stays crisp at 100%
+            .overlay(alignment: .bottomTrailing) {
+                if done {
+                    CircularProgressView(
+                        progress: progress,
+                        gradient: [Color.blue.opacity(0.9), Color.blue.opacity(0.7)]
+                    )
+                    .padding(20)
+                }
+            }
             .contentShape(Rectangle())
     }
+
     
     // MARK: - Apple-style Year Block (updated to use dataManager)
     private func appleYearBlock(title: String) -> some View {
-        RoundedRectangle(cornerRadius: 12)
+        let progress = dataManager.yearProgress[title] ?? 0
+        let done = progress >= 0.999
+
+        return RoundedRectangle(cornerRadius: 12)
             .fill(Color.gray.opacity(0.15))
             .aspectRatio(1.3, contentMode: .fit)
             .overlay(
                 ZStack {
-                    // Background preview images from dataManager
                     if let previewImages = dataManager.yearPreviewImages[title], !previewImages.isEmpty {
                         photoPreviewGrid(images: previewImages)
                     } else {
-                        // Fallback gradient (no more bubbles)
                         RoundedRectangle(cornerRadius: 12)
                             .fill(LinearGradient(
                                 gradient: Gradient(colors: [Color.red.opacity(0.6), Color.pink.opacity(0.6)]),
@@ -757,55 +779,63 @@ struct NavStackedBlocksView: View {
                                 endPoint: .bottomTrailing
                             ))
                     }
-                    
-                    // Dark overlay
+
                     RoundedRectangle(cornerRadius: 12)
                         .fill(
                             LinearGradient(
-                                gradient: Gradient(colors: [
-                                    Color.black.opacity(0.5),
-                                    Color.clear
-                                ]),
+                                gradient: Gradient(colors: [Color.black.opacity(0.5), Color.clear]),
                                 startPoint: .bottom,
                                 endPoint: .center
                             )
                         )
-                    
-                    // Content
+
                     VStack {
                         Spacer()
-                        HStack {
+                        HStack(alignment: .bottom) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(title)
                                     .foregroundColor(.white)
                                     .font(.system(size: 18, weight: .bold))
                             }
-                            
                             Spacer()
-                            
-                            // Progress indicator from dataManager
-                            if let progress = dataManager.yearProgress[title], progress > 0 {
-                                CircularProgressView(progress: progress, gradient: [Color.white.opacity(0.8), Color.white.opacity(0.6)])
+                            if progress > 0 {
+                                CircularProgressView(
+                                    progress: progress,
+                                    gradient: [Color.white.opacity(0.8), Color.white.opacity(0.6)]
+                                )
                             }
                         }
                         .padding(12)
                     }
                 }
             )
+            .overlay(doneOverlay(done))
+            .overlay(alignment: .bottomLeading) { if done { Text(title).font(.system(size: 18, weight: .bold)).foregroundColor(.white).padding(12) } }
+            .overlay(alignment: .bottomTrailing) {
+                if done {
+                    CircularProgressView(
+                        progress: progress,
+                        gradient: [Color.blue.opacity(0.9), Color.blue.opacity(0.7)]
+                    )
+                    .padding(12)
+                }
+            }
     }
+
     
     // MARK: - Apple-style Album Block (updated to use dataManager)
     private func appleAlbumBlock(title: String) -> some View {
-        RoundedRectangle(cornerRadius: 12)
+        let progress = dataManager.albumProgress[title] ?? 0
+        let done = progress >= 0.999
+
+        return RoundedRectangle(cornerRadius: 12)
             .fill(Color.gray.opacity(0.15))
             .aspectRatio(1.3, contentMode: .fit)
             .overlay(
                 ZStack {
-                    // Background preview images from dataManager
                     if let previewImages = dataManager.albumPreviewImages[title], !previewImages.isEmpty {
                         photoPreviewGrid(images: previewImages)
                     } else {
-                        // Fallback gradient
                         RoundedRectangle(cornerRadius: 12)
                             .fill(LinearGradient(
                                 gradient: Gradient(colors: [Color.orange.opacity(0.6), Color.yellow.opacity(0.6)]),
@@ -813,43 +843,51 @@ struct NavStackedBlocksView: View {
                                 endPoint: .bottomTrailing
                             ))
                     }
-                    
-                    // Dark overlay
+
                     RoundedRectangle(cornerRadius: 12)
                         .fill(
                             LinearGradient(
-                                gradient: Gradient(colors: [
-                                    Color.black.opacity(0.5),
-                                    Color.clear
-                                ]),
+                                gradient: Gradient(colors: [Color.black.opacity(0.5), Color.clear]),
                                 startPoint: .bottom,
                                 endPoint: .center
                             )
                         )
-                    
-                    // Content
+
                     VStack {
                         Spacer()
-                        HStack {
+                        HStack(alignment: .bottom) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(title)
                                     .foregroundColor(.white)
                                     .font(.system(size: 16, weight: .bold))
                                     .lineLimit(2)
                             }
-                            
                             Spacer()
-                            
-                            // Progress indicator from dataManager
-                            if let progress = dataManager.albumProgress[title], progress > 0 {
-                                CircularProgressView(progress: progress, gradient: [Color.white.opacity(0.8), Color.white.opacity(0.6)])
+                            if progress > 0 {
+                                CircularProgressView(
+                                    progress: progress,
+                                    gradient: [Color.white.opacity(0.8), Color.white.opacity(0.6)]
+                                )
                             }
                         }
                         .padding(12)
                     }
                 }
             )
+            .overlay(doneOverlay(done))
+            .overlay(alignment: .bottomLeading) { if done { Text(title).font(.system(size: 16, weight: .bold)).foregroundColor(.white).lineLimit(2).padding(12) } }
+            .overlay(alignment: .bottomTrailing) {
+                if done {
+                    CircularProgressView(
+                        progress: progress,
+                        gradient: [Color.blue.opacity(0.9), Color.blue.opacity(0.7)]
+                    )
+                    .padding(12)
+                }
+            }
     }
+
+
     
     // MARK: - Photo Preview Grid (simplified to single image)
     private func photoPreviewGrid(images: [UIImage]) -> some View {
@@ -869,6 +907,25 @@ struct NavStackedBlocksView: View {
     }
     
     // MARK: - Helper functions to get preview images from dataManager
+    
+    @MainActor
+    private func refreshProgress() async {
+        let cats = await ProgressManager.shared.getCategoryProgress()
+        dataManager.categoryProgress = cats
+
+        let yrs = await ProgressManager.shared.getYearProgress(for: dataManager.yearsList)
+        dataManager.yearProgress = yrs
+
+        let albs = await ProgressManager.shared.getAlbumProgress(for: dataManager.folders)
+        var byTitle: [String: Double] = [:]
+        for folder in dataManager.folders {
+            if let title = folder.localizedTitle, let p = albs[title] {
+                byTitle[title] = p
+            }
+        }
+        dataManager.albumProgress = byTitle
+    }
+
     private func getYearsPreviewImages() -> [UIImage] {
         let firstFewYears = Array(dataManager.yearsList.prefix(4))
         var allImages: [UIImage] = []
@@ -897,6 +954,26 @@ struct NavStackedBlocksView: View {
         
         return Array(allImages.prefix(4))
     }
+    
+    private func isCategoryDone(_ index: Int) -> Bool { (dataManager.categoryProgress[index] ?? 0) >= 0.999 }
+    private func isYearDone(_ title: String) -> Bool { (dataManager.yearProgress[title] ?? 0) >= 0.999 }
+    private func isAlbumDone(_ title: String) -> Bool { (dataManager.albumProgress[title] ?? 0) >= 0.999 }
+
+    @ViewBuilder
+    private func doneOverlay(_ done: Bool) -> some View {
+        if done {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    LinearGradient(
+                        colors: [Color.black.opacity(0.15), Color.clear],
+                        startPoint: .bottom, endPoint: .top
+                    )
+                )
+                .allowsHitTesting(false)
+        }
+    }
+
     
     // MARK: - Search Logic (updated to use dataManager)
     private func performSearch(query: String) {
@@ -1313,34 +1390,44 @@ struct NavStackedBlocksView: View {
         let fetchOptions = PHFetchOptions()
         fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         
-        let swipedIdentifiers = Array(SwipedMediaManager.shared.getSwipedMediaIdentifiers())
+        // Use identifiers, not PHAsset objects, in the predicate
+        let selectedIds = selectedFolderAssets.map { $0.localIdentifier }
+        let swipedIds = Array(SwipedMediaManager.shared.getSwipedMediaIdentifiers())
         
-        if swipedIdentifiers.isEmpty {
-            fetchOptions.predicate = NSPredicate(format: "SELF IN %@", selectedFolderAssets)
+        if swipedIds.isEmpty {
+            fetchOptions.predicate = NSPredicate(format: "localIdentifier IN %@", selectedIds)
         } else {
-            fetchOptions.predicate = NSPredicate(format: "SELF IN %@ AND NOT (localIdentifier IN %@)",
-                                               selectedFolderAssets, swipedIdentifiers)
+            fetchOptions.predicate = NSPredicate(
+                format: "localIdentifier IN %@ AND NOT (localIdentifier IN %@)",
+                selectedIds, swipedIds
+            )
         }
         
         return fetchOptions
     }
+
     
     private func createYearFilterOptions() -> PHFetchOptions {
         let fetchOptions = PHFetchOptions()
         fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         
-        let swipedIdentifiers = Array(SwipedMediaManager.shared.getSwipedMediaIdentifiers())
+        // Use identifiers, not PHAsset objects, in the predicate
+        let selectedIds = selectedYearAssets.map { $0.localIdentifier }
+        let swipedIds = Array(SwipedMediaManager.shared.getSwipedMediaIdentifiers())
         
-        if swipedIdentifiers.isEmpty {
-            fetchOptions.predicate = NSPredicate(format: "SELF IN %@", selectedYearAssets)
+        if swipedIds.isEmpty {
+            fetchOptions.predicate = NSPredicate(format: "localIdentifier IN %@", selectedIds)
         } else {
-            fetchOptions.predicate = NSPredicate(format: "SELF IN %@ AND NOT (localIdentifier IN %@)",
-                                               selectedYearAssets, swipedIdentifiers)
+            fetchOptions.predicate = NSPredicate(
+                format: "localIdentifier IN %@ AND NOT (localIdentifier IN %@)",
+                selectedIds, swipedIds
+            )
         }
         
         return fetchOptions
     }
 }
+
 
 // MARK: - Search UI Models
 struct SearchCapability {

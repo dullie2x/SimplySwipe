@@ -38,7 +38,7 @@ class SwipeData: ObservableObject {
 
     // MARK: - Swipe Handling
     func incrementSwipeCount() {
-        if !isPremium && swipeCount >= 50 {
+        if !isPremium && swipeCount >= 100 {
             if extraSwipes > 0 {
                 extraSwipes -= 1
                 print("Used 1 extra swipe. Remaining: \(extraSwipes)")
@@ -89,7 +89,7 @@ class SwipeData: ObservableObject {
     func remainingSwipes() -> Int {
         if isPremium { return .max }
 
-        let base = max(0, 50 - swipeCount)
+        let base = max(0, 100 - swipeCount)
         return base + extraSwipes
     }
 
