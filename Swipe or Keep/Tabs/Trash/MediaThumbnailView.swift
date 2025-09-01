@@ -85,7 +85,7 @@ struct MediaThumbnailView: View {
                                     .foregroundColor(.yellow)
                                     .font(.system(size: 24))
                                 Text("Tap to retry")
-                                    .font(.caption)
+                                    .font(.custom(AppFont.regular, size: 20))
                                     .foregroundColor(.white)
                             }
                         }

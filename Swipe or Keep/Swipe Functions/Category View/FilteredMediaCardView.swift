@@ -141,7 +141,7 @@ private struct BouncingLogo: View {
             let t = timeline.date.timeIntervalSinceReferenceDate
             let y = sin((2 * .pi / period) * t) * amplitude
 
-            Image("logo2")
+            Image("orca7")
                 .resizable()
                 .scaledToFit()
                 .frame(width: size, height: size)

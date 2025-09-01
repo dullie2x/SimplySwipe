@@ -45,7 +45,7 @@ struct CircularProgressView: View {
             // Progress text
             if progress > 0 {
                 Text("\(Int(ceil(progress * 100)))%")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.custom(AppFont.regular, size: 10))
                     .foregroundColor(.white)
             }
         }
@@ -155,7 +155,7 @@ struct NavStackedBlocksView: View {
                 if #available(iOS 17.0, *) {
                     TextField("Search time periods...", text: $searchText)
                         .foregroundColor(.white)
-                        .font(.system(size: 16))
+                        .font(.custom(AppFont.regular, size: 16))
                         .textFieldStyle(PlainTextFieldStyle())
                         .onChange(of: searchText) { _, newValue in
                             performSearch(query: newValue)
@@ -163,7 +163,7 @@ struct NavStackedBlocksView: View {
                 } else {
                     TextField("Search time periods...", text: $searchText)
                         .foregroundColor(.white)
-                        .font(.system(size: 16))
+                        .font(.custom(AppFont.regular, size: 16))
                         .textFieldStyle(PlainTextFieldStyle())
                         .onChange(of: searchText) { newValue in
                             performSearch(query: newValue)
@@ -194,7 +194,7 @@ struct NavStackedBlocksView: View {
                 }) {
                     Text("Cancel")
                         .foregroundColor(.white.opacity(0.8))
-                        .font(.system(size: 16))
+                        .font(.custom(AppFont.regular, size: 16))
                 }
             }
             .padding(.horizontal, 16)
@@ -210,8 +210,8 @@ struct NavStackedBlocksView: View {
                     HStack {
                         Text("Search Suggestions")
                             .foregroundColor(.white)
-                            .font(.system(size: 20, weight: .semibold))
-                        
+                            .font(.custom(AppFont.regular, size: 20))
+
                         Spacer()
                         
                         Image(systemName: "lightbulb")
@@ -229,7 +229,7 @@ struct NavStackedBlocksView: View {
                             
                             Text("Try searching for:")
                                 .foregroundColor(.white.opacity(0.8))
-                                .font(.system(size: 16, weight: .medium))
+                                .font(.custom(AppFont.regular, size: 16))
                         }
                         
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -246,7 +246,7 @@ struct NavStackedBlocksView: View {
                                             
                                             Text(example)
                                                 .foregroundColor(.white)
-                                                .font(.system(size: 14, weight: .medium))
+                                                .font(.custom(AppFont.regular, size: 14))
                                         }
                                         .padding(.horizontal, 16)
                                         .padding(.vertical, 10)
@@ -275,7 +275,7 @@ struct NavStackedBlocksView: View {
                             
                             Text("Quick Actions")
                                 .foregroundColor(.white.opacity(0.8))
-                                .font(.system(size: 16, weight: .medium))
+                                .font(.custom(AppFont.regular, size: 16))
                         }
                         
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
@@ -305,13 +305,13 @@ struct NavStackedBlocksView: View {
                                         VStack(spacing: 2) {
                                             Text(action.title)
                                                 .foregroundColor(.white)
-                                                .font(.system(size: 14, weight: .semibold))
+                                                .font(.custom(AppFont.regular, size: 14))
                                                 .lineLimit(1)
                                             
-                                            Text(action.subtitle)
-                                                .foregroundColor(.white.opacity(0.6))
-                                                .font(.system(size: 12))
-                                                .lineLimit(1)
+//                                            Text(action.subtitle)
+//                                                .foregroundColor(.white.opacity(0.6))
+//                                                .font(.custom(AppFont.regular, size: 12))
+//                                                .lineLimit(1)
                                         }
                                     }
                                     .frame(maxWidth: .infinity)
@@ -354,8 +354,8 @@ struct NavStackedBlocksView: View {
             HStack {
                 Text("\(searchResults.count) result\(searchResults.count == 1 ? "" : "s")")
                     .foregroundColor(.white.opacity(0.6))
-                    .font(.system(size: 14))
-                
+                    .font(.custom(AppFont.regular, size: 14))
+
                 Spacer()
             }
             .padding(.horizontal, 4)
@@ -369,7 +369,7 @@ struct NavStackedBlocksView: View {
                     
                     Text("No results found")
                         .foregroundColor(.white.opacity(0.6))
-                        .font(.system(size: 16))
+                        .font(.custom(AppFont.regular, size: 16))
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.top, 60)
@@ -402,12 +402,12 @@ struct NavStackedBlocksView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(result.title)
                     .foregroundColor(.white)
-                    .font(.system(size: 16, weight: .medium))
-                
+                    .font(.custom(AppFont.regular, size: 16))
+
                 if !result.subtitle.isEmpty {
                     Text(result.subtitle)
                         .foregroundColor(.white.opacity(0.6))
-                        .font(.system(size: 14))
+                        .font(.custom(AppFont.regular, size: 14))
                 }
             }
             
@@ -522,8 +522,8 @@ struct NavStackedBlocksView: View {
             HStack {
                 Text("Years")
                     .foregroundColor(.white)
-                    .font(.system(size: 24, weight: .bold))
-                
+                    .font(.custom(AppFont.regular, size: 24))
+
                 Spacer()
                 
                 Button(action: {
@@ -573,8 +573,8 @@ struct NavStackedBlocksView: View {
             HStack {
                 Text("Albums")
                     .foregroundColor(.white)
-                    .font(.system(size: 24, weight: .bold))
-                
+                    .font(.custom(AppFont.regular, size: 24))
+
                 Spacer()
                 
                 Button(action: {
@@ -660,11 +660,11 @@ struct NavStackedBlocksView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(title)
                                     .foregroundColor(.white)
-                                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                                
-                                Text(subtitle)
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .font(.system(size: 16, weight: .medium))
+                                    .font(.custom(AppFont.regular, size: 28))
+
+//                                Text(subtitle)
+//                                    .foregroundColor(.white.opacity(0.8))
+//                                    .font(.custom(AppFont.regular, size: 16))
                             }
                             
                             Spacer()
@@ -725,10 +725,10 @@ struct NavStackedBlocksView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(blockTitles[index])
                                     .foregroundColor(.white)
-                                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                                Text(getSubtitleText(for: index))
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .font(.system(size: 16, weight: .medium))
+                                    .font(.custom(AppFont.regular, size: 28))
+//                                Text(getSubtitleText(for: index))
+//                                    .foregroundColor(.white.opacity(0.8))
+//                                    .font(.custom(AppFont.regular, size: 28))
                             }
                             Spacer()
                             if progress > 0 {
@@ -744,7 +744,8 @@ struct NavStackedBlocksView: View {
             )
             // add blur on top *when done*
             .overlay(doneOverlay(done))
-            .overlay(alignment: .bottomLeading) { if done { Text(blockTitles[index]).font(.system(size: 20, weight: .semibold)).foregroundColor(.white).padding(20) } }
+            .overlay(alignment: .bottomLeading) { if done { Text(blockTitles[index]).font(.custom(AppFont.regular, size: 20))
+.foregroundColor(.white).padding(20) } }
             // re-draw the percent above the blur so it stays crisp at 100%
             .overlay(alignment: .bottomTrailing) {
                 if done {
@@ -795,7 +796,7 @@ struct NavStackedBlocksView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(title)
                                     .foregroundColor(.white)
-                                    .font(.system(size: 18, weight: .bold))
+                                    .font(.custom(AppFont.regular, size: 18))
                             }
                             Spacer()
                             if progress > 0 {
@@ -810,7 +811,8 @@ struct NavStackedBlocksView: View {
                 }
             )
             .overlay(doneOverlay(done))
-            .overlay(alignment: .bottomLeading) { if done { Text(title).font(.system(size: 18, weight: .bold)).foregroundColor(.white).padding(12) } }
+            .overlay(alignment: .bottomLeading) { if done { Text(title).font(.custom(AppFont.regular, size: 18))
+.foregroundColor(.white).padding(12) } }
             .overlay(alignment: .bottomTrailing) {
                 if done {
                     CircularProgressView(
@@ -859,7 +861,7 @@ struct NavStackedBlocksView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(title)
                                     .foregroundColor(.white)
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(.custom(AppFont.regular, size: 16))
                                     .lineLimit(2)
                             }
                             Spacer()
@@ -875,7 +877,8 @@ struct NavStackedBlocksView: View {
                 }
             )
             .overlay(doneOverlay(done))
-            .overlay(alignment: .bottomLeading) { if done { Text(title).font(.system(size: 16, weight: .bold)).foregroundColor(.white).lineLimit(2).padding(12) } }
+            .overlay(alignment: .bottomLeading) { if done { Text(title).font(.custom(AppFont.regular, size: 16))
+.foregroundColor(.white).lineLimit(2).padding(12) } }
             .overlay(alignment: .bottomTrailing) {
                 if done {
                     CircularProgressView(
@@ -1489,7 +1492,7 @@ private struct BouncingLogo: View {
             let t = timeline.date.timeIntervalSinceReferenceDate
             let y = sin((2 * .pi / period) * t) * amplitude
 
-            Image("logo2")
+            Image("orca7")
                 .resizable()
                 .scaledToFit()
                 .frame(width: size, height: size)
@@ -1518,7 +1521,7 @@ struct LoadingView: View {
                 // Subtle cancel button at the bottom
                 Button(action: onCancel) {
                     Text("Cancel")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.custom(AppFont.regular, size: 16))
                         .foregroundColor(.white.opacity(0.6))
                         .padding(.vertical, 8)
                         .padding(.horizontal, 20)

@@ -13,7 +13,7 @@ struct SettingsView: View {
         ScrollView {
             VStack(spacing: 20) {
                 Text("Settings")
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .font(.custom(AppFont.regular, size: 34))
                     .foregroundColor(.white)
                     .padding(.top, 12) // Reduced top padding to move it closer to the top
 
@@ -71,7 +71,7 @@ struct SettingsView: View {
                 .frame(width: 40)
 
             Text(title)
-                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .font(.custom(AppFont.regular, size: 18))
                 .foregroundColor(.white)
 
             Spacer()

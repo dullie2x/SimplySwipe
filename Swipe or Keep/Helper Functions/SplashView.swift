@@ -30,7 +30,7 @@ struct SplashView: View {
                         Spacer()
                         
                         // App Logo centered
-                        Image("logo2") // Ensure it's in Assets.xcassets
+                        Image("orca7") // Ensure it's in Assets.xcassets
                             .resizable()
                             .scaledToFit()
                             .frame(width: 180, height: 180)
@@ -40,12 +40,12 @@ struct SplashView: View {
                         // App name stacked below logo
                         VStack(spacing: 5) {
                             Text("Simply")
-                                .font(.system(size: 36, weight: .bold, design: .rounded))
+                                .font(.custom(AppFont.regular, size: 36))
                                 .foregroundColor(.white)
                                 .offset(x: simplyOffset)
                             
                             Text("Swipe")
-                                .font(.system(size: 36, weight: .bold, design: .rounded))
+                                .font(.custom(AppFont.regular, size: 36))
                                 .foregroundColor(.white)
                                 .offset(x: swipeOffset)
                         }
@@ -56,7 +56,7 @@ struct SplashView: View {
                         if showLoadingText {
                             VStack(spacing: 12) {
                                 Text("\(loadingProgress)\(loadingDots)")
-                                    .font(.system(size: 16, weight: .medium))
+                                    .font(.custom(AppFont.regular, size: 16))
                                     .foregroundColor(.white.opacity(0.7))
                                     .animation(.easeInOut(duration: 0.3), value: loadingDots)
                                     .animation(.easeInOut(duration: 0.3), value: loadingProgress)

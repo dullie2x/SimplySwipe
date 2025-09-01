@@ -34,7 +34,7 @@ struct UserView: View {
                 VStack(spacing: 0) {
                     // Header
                     Text("User Stats")
-                        .font(.system(size: 38, weight: .heavy, design: .rounded))
+                        .font(.custom(AppFont.regular, size: 38))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.bottom, 15)
@@ -72,7 +72,7 @@ struct UserView: View {
                     if !isSubscribed {
                         VStack(spacing: 15) {
                             Text("Want unlimited swipes?")
-                                .font(.system(size: 18, weight: .bold, design: .rounded))
+                                .font(.custom(AppFont.regular, size: 18))
                                 .foregroundColor(.white)
                             
                             Button(action: { showPaywall.toggle() }) {
@@ -80,7 +80,7 @@ struct UserView: View {
                                     Image(systemName: "star.fill")
                                         .foregroundColor(.black)
                                     Text("Upgrade Now")
-                                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                                        .font(.custom(AppFont.regular, size: 18))
                                         .foregroundColor(.black)
                                 }
                                 .frame(maxWidth: .infinity)
@@ -106,7 +106,7 @@ struct UserView: View {
                                 .font(.system(size: 22))
                             
                             Text("Premium User")
-                                .font(.system(size: 18, weight: .bold, design: .rounded))
+                                .font(.custom(AppFont.regular, size: 18))
                                 .foregroundColor(.yellow)
                             
                             Spacer()
@@ -200,7 +200,7 @@ struct UserView: View {
                 .frame(width: 40)
             
             Text(title)
-                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .font(.custom(AppFont.regular, size: 18))
                 .foregroundColor(.white)
             
             Spacer()
@@ -225,13 +225,13 @@ struct UserView: View {
                 .frame(width: 40)
             
             Text(title)
-                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .font(.custom(AppFont.regular, size: 18))
                 .foregroundColor(.white)
             
             Spacer()
             
             Text(value)
-                .font(.system(size: 18, weight: .bold))
+                .font(.custom(AppFont.regular, size: 18))
                 .foregroundColor(title == "Swipes Remaining" || title == "Extra Swipes" ? .blue : (highlight ? .blue : .gray))
         }
         .padding(.vertical, 16)

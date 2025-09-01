@@ -42,11 +42,11 @@ struct FilteredCaption: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(mediaSize)
-                                .font(.system(size: 22, weight: .semibold))
+                                .font(.custom(AppFont.regular, size: 24))
                                 .foregroundColor(.white)
                                 .shadow(color: .black.opacity(0.8), radius: 2, x: 0, y: 1)
                             Text(formattedDate)
-                                .font(.system(size: 18, weight: .medium))
+                                .font(.custom(AppFont.regular, size: 15))
                                 .foregroundColor(.white.opacity(0.8))
                                 .shadow(color: .black.opacity(0.6), radius: 1, x: 0, y: 1)
                         }
@@ -88,7 +88,7 @@ struct FilteredCaption: View {
                                     }
                                 }
                                 Text("Like")
-                                    .font(.system(size: 11, weight: .bold)) // Reduced from 12
+                                    .font(.custom(AppFont.regular, size: 11))
                                     .foregroundColor(.white)
                                     .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
                             }
@@ -98,7 +98,7 @@ struct FilteredCaption: View {
                                 shareButton
                                     .frame(width: 44, height: 44) // Reduced from 48
                                 Text("Share")
-                                    .font(.system(size: 11, weight: .bold)) // Reduced from 12
+                                    .font(.custom(AppFont.regular, size: 11))
                                     .foregroundColor(.white)
                                     .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
                             }
@@ -114,7 +114,7 @@ struct FilteredCaption: View {
                                             .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 2)
                                     }
                                     Text(muted ? "Unmute" : "Mute")
-                                        .font(.system(size: 11, weight: .bold)) // Reduced from 12
+                                        .font(.custom(AppFont.regular, size: 11))
                                         .foregroundColor(.white)
                                         .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
                                 }

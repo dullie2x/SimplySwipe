@@ -15,7 +15,7 @@ struct MainView: View {
                 VStack {
                     // App Name Header
                     Text("Simply Swipe")
-                        .font(.system(size: 38, weight: .heavy, design: .rounded))
+                        .font(.custom(AppFont.regular, size: 38))
                         .foregroundColor(.white)
                         .padding(.top, 20)
                         .padding(.bottom, 1)
@@ -43,7 +43,7 @@ struct MainView: View {
                         // Header with close button
                         HStack {
                             Text("Quick Guide")
-                                .font(.system(size: 24, weight: .bold, design: .rounded))
+                                .font(.custom(AppFont.regular, size: 24))
                                 .foregroundColor(.white)
                             
                             Spacer()
@@ -133,7 +133,7 @@ struct MainView: View {
                 .frame(width: 26, height: 26)
             
             Text(text)
-                .font(.system(size: 18, weight: .medium, design: .rounded))
+                .font(.custom(AppFont.regular, size: 18))
                 .foregroundColor(.white)
                 .lineSpacing(4)
         }
@@ -159,7 +159,7 @@ struct MainView: View {
                 Text(keyword)
                     .foregroundColor(color)
             }
-            .font(.system(size: 18, weight: .medium, design: .rounded))
+            .font(.custom(AppFont.regular, size: 18))
             .lineSpacing(4)
         }
     }

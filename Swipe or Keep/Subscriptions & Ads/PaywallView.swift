@@ -25,7 +25,7 @@ struct PaywallView: View {
             .edgesIgnoringSafeArea(.all)
 
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 40) {
                     HStack {
                         Spacer()
                         Button(action: { dismiss() }) {
@@ -36,23 +36,16 @@ struct PaywallView: View {
                                 .shadow(radius: 5)
                         }
                         .padding(.top, 15)
-                        .padding(.trailing, 15)
+                        .padding(.trailing, 20)
                     }
+
 
                     VStack(spacing: 10) {
                         Text("Unlock Unlimited Swipes")
-                            .font(.system(size: 30, weight: .heavy, design: .rounded))
+                            .font(.custom(AppFont.regular, size: 30))
                             .foregroundColor(.white)
                             .shadow(radius: 5)
-
-                        Text("Upgrade or watch an ad for 10 more.")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(.white.opacity(0.8))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 10)
                     }
-                    .padding(.top, -20)
 
                     Button(action: {
                         showAdView = true
@@ -62,7 +55,7 @@ struct PaywallView: View {
                                 .foregroundColor(.white)
                                 .font(.system(size: 22))
                             Text("Watch Ad for 10 More Swipes")
-                                .font(.system(size: 18, weight: .bold))
+                                .font(.custom(AppFont.regular, size: 18))
                                 .foregroundColor(.white)
                         }
                         .frame(maxWidth: .infinity)
@@ -126,19 +119,19 @@ struct PaywallView: View {
                                 HStack {
                                     ProgressView()
                                     Text("Restoring...")
-                                        .font(.system(size: 16, weight: .medium))
+                                        .font(.custom(AppFont.regular, size: 16))
                                         .foregroundColor(.white.opacity(0.8))
                                 }
                             } else {
                                 Text("Restore Purchase")
-                                    .font(.system(size: 16, weight: .medium))
+                                    .font(.custom(AppFont.regular, size: 16))
                                     .foregroundColor(.white.opacity(0.8))
                             }
                         }
 
                         HStack(spacing: 10) {
                             Text("Terms of Use")
-                                .font(.system(size: 14))
+                                .font(.custom(AppFont.regular, size: 14))
                                 .foregroundColor(.black)
                                 .underline()
                                 .onTapGesture {
@@ -150,7 +143,7 @@ struct PaywallView: View {
                                 .foregroundColor(.black)
                             
                             Text("Privacy Policy")
-                                .font(.system(size: 14))
+                                .font(.custom(AppFont.regular, size: 14))
                                 .foregroundColor(.black)
                                 .underline()
                                 .onTapGesture {
@@ -220,17 +213,17 @@ struct PaywallOption: View {
             HStack {
                 VStack(alignment: .leading) {
                     Text(title)
-                        .font(.system(size: highlight ? 16 : 18, weight: .bold))
+                        .font(.custom(AppFont.regular, size: 15))
                         .foregroundColor(highlight ? .black : .white)
                     
                     Text(price)
-                        .font(.system(size: 18, weight: highlight ? .bold : .regular))
+                        .font(.custom(AppFont.regular, size: 15))
                         .foregroundColor(highlight ? .red : .white.opacity(0.8))
                 }
                 Spacer()
                 if highlight {
                     Text("🔥 Save 58%")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.custom(AppFont.regular, size: 12))
                         .foregroundColor(.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)

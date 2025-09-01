@@ -20,7 +20,7 @@ struct FavoritesView: View {
                         .foregroundColor(.green)
                     
                     Text("All Done!")
-                        .font(.largeTitle)
+                        .font(.custom(AppFont.regular, size: 20))
                         .fontWeight(.bold)
                         .foregroundColor(.white)
                     
@@ -29,7 +29,7 @@ struct FavoritesView: View {
                         presentationMode.wrappedValue.dismiss()
                     }) {
                         Text("Return to Home")
-                            .font(.headline)
+                            .font(.custom(AppFont.regular, size: 20))
                             .foregroundColor(.white)
                             .padding(.vertical, 12)
                             .padding(.horizontal, 24)

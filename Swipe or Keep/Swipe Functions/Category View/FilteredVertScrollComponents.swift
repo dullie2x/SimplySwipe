@@ -24,7 +24,7 @@ struct FilteredMediaLoadingView: View {
                 let t = timeline.date.timeIntervalSinceReferenceDate
                 let y = sin((2 * .pi / 0.9) * t) * 10
                 
-                Image("logo2")
+                Image("orca7")
                     .resizable()
                     .scaledToFit()
                     .frame(width: 100, height: 100)

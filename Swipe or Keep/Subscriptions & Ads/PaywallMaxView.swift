@@ -41,53 +41,31 @@ struct PaywallMaxView: View {
                     Spacer(minLength: 10)
                     
                     VStack(spacing: 10) {
-                        Text("You're Out of Free Swipes!")
-                            .font(.system(size: 30, weight: .bold))
+                        Text("Out of Swipes!")
+                            .font(.custom(AppFont.regular, size: 30))
                             .foregroundColor(.white)
                             .shadow(radius: 5)
-                        
-                        Text("Choose an option below:")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(.white.opacity(0.8))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 10)
+
                     }
 
-                    Group {
-                        Button(action: {
-                            dismiss()
-                        }) {
-                            Text("Wait Until Tomorrow for Free Swipes")
-                                .font(.system(size: 18, weight: .bold))
+                    Button(action: {
+                        showAdView = true
+                    }) {
+                        HStack {
+                            Image(systemName: "play.rectangle.fill")
                                 .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.gray.opacity(0.7))
-                                .cornerRadius(12)
-                                .shadow(radius: 5)
+                                .font(.system(size: 22))
+                            Text("Watch Ad for 10 More Swipes")
+                                .font(.custom(AppFont.regular, size: 18))
+                                .foregroundColor(.white)
                         }
-                        .padding(.horizontal, 20)
-
-                        Button(action: {
-                            showAdView = true
-                        }) {
-                            HStack {
-                                Image(systemName: "play.rectangle.fill")
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 22))
-                                Text("Watch Ad for 10 More Swipes")
-                                    .font(.system(size: 18, weight: .bold))
-                                    .foregroundColor(.white)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue.opacity(0.9))
-                            .cornerRadius(12)
-                            .shadow(radius: 5)
-                        }
-                        .padding(.horizontal, 20)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue.opacity(0.9))
+                        .cornerRadius(12)
+                        .shadow(radius: 5)
                     }
+                    .padding(.horizontal, 20)
 
                     if storeManager.products.isEmpty {
                         ProgressView("Loading options...")
@@ -151,19 +129,19 @@ struct PaywallMaxView: View {
                                     ProgressView()
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                     Text("Restoring...")
-                                        .font(.system(size: 16, weight: .medium))
+                                        .font(.custom(AppFont.regular, size: 16))
                                         .foregroundColor(.white.opacity(0.8))
                                 }
                             } else {
                                 Text("Restore Purchase")
-                                    .font(.system(size: 16, weight: .medium))
+                                    .font(.custom(AppFont.regular, size: 16))
                                     .foregroundColor(.white.opacity(0.8))
                             }
                         }
 
                         HStack(spacing: 10) {
                             Text("Terms of Use")
-                                .font(.system(size: 14))
+                                .font(.custom(AppFont.regular, size: 14))
                                 .foregroundColor(.black)
                                 .underline()
                                 .onTapGesture {
@@ -175,7 +153,7 @@ struct PaywallMaxView: View {
                                 .foregroundColor(.black)
                             
                             Text("Privacy Policy")
-                                .font(.system(size: 14))
+                                .font(.custom(AppFont.regular, size: 14))
                                 .foregroundColor(.black)
                                 .underline()
                                 .onTapGesture {

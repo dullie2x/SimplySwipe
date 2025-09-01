@@ -49,7 +49,7 @@ struct TrashView: View {
                     if !swipedMediaManager.trashedMediaAssets.isEmpty {
                         Button(action: toggleSelectionMode) {
                             Text(isSelectionMode ? "Cancel" : "Select")
-                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                .font(.custom(AppFont.regular, size: 15))
                         }
                         .buttonStyle(.plain)
                         .foregroundColor(.white)
@@ -121,12 +121,12 @@ struct TrashView: View {
                 )
 
             Text("No items in Trash")
-                .font(.title3)
+                .font(.custom(AppFont.regular, size: 20))
                 .fontWeight(.semibold)
                 .foregroundColor(.white)
 
             Text("Items you delete will appear here")
-                .font(.subheadline)
+                .font(.custom(AppFont.regular, size: 12))
                 .foregroundColor(.gray)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
@@ -177,7 +177,7 @@ struct TrashView: View {
                 HStack(spacing: 6) {
                     Image(systemName: selectedItems.count == swipedMediaManager.trashedMediaAssets.count ? "checkmark.circle.fill" : "circle")
                     Text(selectedItems.count == swipedMediaManager.trashedMediaAssets.count ? "Deselect All" : "Select All")
-                        .fontWeight(.medium)
+                        .font(.custom(AppFont.regular, size: 20))
                 }
                 .foregroundColor(.white)
             }
@@ -195,7 +195,7 @@ struct TrashView: View {
                             Image(systemName: "arrow.uturn.backward")
                         }
                         Text("Recover")
-                            .fontWeight(.medium)
+                            .font(.custom(AppFont.regular, size: 12))
                     }
                     .foregroundStyle(
                         LinearGradient(
@@ -217,7 +217,7 @@ struct TrashView: View {
                             Image(systemName: "trash.fill")
                         }
                         Text("Delete")
-                            .fontWeight(.medium)
+                            .font(.custom(AppFont.regular, size: 12))
                     }
                     .foregroundColor(deleteColor)
                 }

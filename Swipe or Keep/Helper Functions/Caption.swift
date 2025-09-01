@@ -42,11 +42,11 @@ struct Caption: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(mediaSize)
-                                .font(.system(size: 24, weight: .semibold))
+                                .font(.custom(AppFont.regular, size: 24))
                                 .foregroundColor(.white)
                                 .shadow(color: .black.opacity(0.8), radius: 2, x: 0, y: 1)
                             Text(formattedDate)
-                                .font(.system(size: 20, weight: .medium))
+                                .font(.custom(AppFont.regular, size: 15))
                                 .foregroundColor(.white.opacity(0.8))
                                 .shadow(color: .black.opacity(0.6), radius: 1, x: 0, y: 1)
                         }
@@ -90,7 +90,7 @@ struct Caption: View {
                                     }
                                 }
                                 Text("Like")
-                                    .font(.system(size: 12, weight: .bold))
+                                    .font(.custom(AppFont.regular, size: 12))
                                     .foregroundColor(.white)
                                     .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
                             }
@@ -100,7 +100,7 @@ struct Caption: View {
                                 shareButton
                                     .frame(width: 48, height: 48)
                                 Text("Share")
-                                    .font(.system(size: 12, weight: .bold))
+                                    .font(.custom(AppFont.regular, size: 12))
                                     .foregroundColor(.white)
                                     .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
                             }
@@ -116,7 +116,7 @@ struct Caption: View {
                                             .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
                                     }
                                     Text(muted ? "Unmute" : "Mute")
-                                        .font(.system(size: 12, weight: .bold))
+                                        .font(.custom(AppFont.regular, size: 12))
                                         .foregroundColor(.white)
                                         .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
                                 }

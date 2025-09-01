@@ -30,12 +30,12 @@ struct EndOfGalleryView: View {
                 // Main message
                 VStack(spacing: 15) {
                     Text("Gallery Complete!")
-                        .font(.system(size: 32, weight: .bold))
+                        .font(.custom(AppFont.regular, size: 32))
                         .foregroundColor(.white)
                         .multilineTextAlignment(.center)
                     
                     Text("You've reviewed all \(totalCount) photos and videos")
-                        .font(.system(size: 18))
+                        .font(.custom(AppFont.regular, size: 18))
                         .foregroundColor(.gray)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 40)
@@ -55,7 +55,7 @@ struct EndOfGalleryView: View {
                             Image(systemName: "arrow.clockwise")
                                 .font(.system(size: 18, weight: .semibold))
                             Text("Start Again")
-                                .font(.system(size: 18, weight: .semibold))
+                                .font(.custom(AppFont.regular, size: 18))
                         }
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
@@ -74,7 +74,7 @@ struct EndOfGalleryView: View {
                             Image(systemName: "house")
                                 .font(.system(size: 16, weight: .medium))
                             Text("Go to Home")
-                                .font(.system(size: 16, weight: .medium))
+                                .font(.custom(AppFont.regular, size: 16))
                         }
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
