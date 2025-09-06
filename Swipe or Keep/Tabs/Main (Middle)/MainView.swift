@@ -14,7 +14,7 @@ struct MainView: View {
             ZStack {
                 VStack {
                     // App Name Header
-                    Text("Simply Swipe")
+                    Text("simply swipe")
                         .font(.custom(AppFont.regular, size: 38))
                         .foregroundColor(.white)
                         .padding(.top, 20)

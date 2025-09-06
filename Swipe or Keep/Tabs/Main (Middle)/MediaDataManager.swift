@@ -191,7 +191,7 @@ class MediaDataManager: ObservableObject {
                     var hasResumed = false
                     imageManager.requestImage(
                         for: asset,
-                        targetSize: CGSize(width: 100, height: 100), // Smaller for better performance
+                        targetSize: CGSize(width: 200, height: 200), // Smaller for better performance
                         contentMode: .aspectFill,
                         options: requestOptions
                     ) { image, info in
@@ -256,7 +256,7 @@ class MediaDataManager: ObservableObject {
                     var hasResumed = false
                     imageManager.requestImage(
                         for: asset,
-                        targetSize: CGSize(width: 100, height: 100), // Smaller for better performance
+                        targetSize: CGSize(width: 200, height: 200), // Smaller for better performance
                         contentMode: .aspectFill,
                         options: requestOptions
                     ) { image, info in
@@ -307,7 +307,7 @@ class MediaDataManager: ObservableObject {
                     var hasResumed = false
                     imageManager.requestImage(
                         for: asset,
-                        targetSize: CGSize(width: 100, height: 100), // Smaller for better performance
+                        targetSize: CGSize(width: 200, height: 200), // Smaller for better performance
                         contentMode: .aspectFill,
                         options: requestOptions
                     ) { image, info in

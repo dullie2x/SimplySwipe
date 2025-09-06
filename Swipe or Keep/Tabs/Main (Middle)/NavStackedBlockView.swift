@@ -431,17 +431,17 @@ struct NavStackedBlocksView: View {
         VStack(spacing: 20) {
             // Main categories (always visible as large blocks)
             mainCategoriesView()
-                .zIndex(10)
+                // REMOVED: .zIndex(10)
             
             // Years section - large block or expanded grid
             if !dataManager.yearsList.isEmpty {
                 if isYearsSectionExpanded {
                     expandedYearsView()
-                        .zIndex(8)
+                        // REMOVED: .zIndex(8)
                         .clipped()
                 } else {
                     largeYearsBlock()
-                        .zIndex(8)
+                        // REMOVED: .zIndex(8)
                         .clipped()
                 }
             }
@@ -450,10 +450,10 @@ struct NavStackedBlocksView: View {
             if !dataManager.folders.isEmpty {
                 if isAlbumsSectionExpanded {
                     expandedAlbumsView()
-                        .zIndex(6)
+                        // REMOVED: .zIndex(6)
                 } else {
                     largeAlbumsBlock()
-                        .zIndex(6)
+                        // REMOVED: .zIndex(6)
                 }
             }
         }
@@ -464,14 +464,14 @@ struct NavStackedBlocksView: View {
         VStack(alignment: .leading, spacing: 20) {
             ForEach(0..<3, id: \.self) { index in
                 Button(action: {
+                    print("DEBUG: Category \(index) tapped") // Add debug logging
                     selectedIndex = IdentifiableInt(value: index)
                 }) {
                     appleCategoryBlock(index: index)
-                        .clipped()
                 }
                 .buttonStyle(PlainButtonStyle())
-                .contentShape(Rectangle())
-                .allowsHitTesting(true)
+                .contentShape(Rectangle()) // Move contentShape here
+                // REMOVED: .allowsHitTesting(true) - redundant
             }
         }
     }
@@ -479,6 +479,7 @@ struct NavStackedBlocksView: View {
     // MARK: - Large Years Block (updated - no loading state)
     private func largeYearsBlock() -> some View {
         Button(action: {
+            print("DEBUG: Years block tapped") // Add debug logging
             withAnimation(.easeInOut(duration: 0.3)) {
                 isYearsSectionExpanded = true
             }
@@ -491,14 +492,13 @@ struct NavStackedBlocksView: View {
             )
         }
         .buttonStyle(PlainButtonStyle())
-        .contentShape(Rectangle())
-        .allowsHitTesting(true)
-        .clipped()
+        .contentShape(Rectangle()) // Ensure proper touch area
     }
     
     // MARK: - Large Albums Block (updated - no loading state)
     private func largeAlbumsBlock() -> some View {
         Button(action: {
+            print("DEBUG: Albums block tapped") // Add debug logging
             withAnimation(.easeInOut(duration: 0.3)) {
                 isAlbumsSectionExpanded = true
             }
@@ -511,8 +511,7 @@ struct NavStackedBlocksView: View {
             )
         }
         .buttonStyle(PlainButtonStyle())
-        .contentShape(Rectangle())
-        .allowsHitTesting(true)
+        .contentShape(Rectangle()) // Ensure proper touch area
     }
     
     // MARK: - Expanded Years View (updated to use dataManager)
@@ -527,6 +526,7 @@ struct NavStackedBlocksView: View {
                 Spacer()
                 
                 Button(action: {
+                    print("DEBUG: Years collapse tapped") // Add debug logging
                     withAnimation(.easeInOut(duration: 0.3)) {
                         isYearsSectionExpanded = false
                     }
@@ -543,10 +543,9 @@ struct NavStackedBlocksView: View {
                                         .stroke(Color.white.opacity(0.2), lineWidth: 1)
                                 )
                         )
-                        .contentShape(Circle())
                 }
                 .buttonStyle(PlainButtonStyle())
-                .zIndex(1000)
+                .contentShape(Circle()) // Ensure proper touch area for circle
             }
             .padding(.horizontal, 4)
             .padding(.bottom, 12)
@@ -555,11 +554,13 @@ struct NavStackedBlocksView: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 2), spacing: 20) {
                 ForEach(dataManager.yearsList, id: \.self) { year in
                     Button(action: {
+                        print("DEBUG: Year \(year) tapped") // Add debug logging
                         fetchAssets(forYear: year)
                     }) {
                         appleYearBlock(title: year)
                     }
                     .buttonStyle(PlainButtonStyle())
+                    .contentShape(Rectangle()) // Ensure proper touch area
                 }
             }
             .padding(.top, 8)
@@ -578,6 +579,7 @@ struct NavStackedBlocksView: View {
                 Spacer()
                 
                 Button(action: {
+                    print("DEBUG: Albums collapse tapped") // Add debug logging
                     withAnimation(.easeInOut(duration: 0.3)) {
                         isAlbumsSectionExpanded = false
                     }
@@ -594,10 +596,9 @@ struct NavStackedBlocksView: View {
                                         .stroke(Color.white.opacity(0.2), lineWidth: 1)
                                 )
                         )
-                        .contentShape(Circle())
                 }
                 .buttonStyle(PlainButtonStyle())
-                .zIndex(1000)
+                .contentShape(Circle()) // Ensure proper touch area for circle
             }
             .padding(.horizontal, 4)
             .padding(.bottom, 12)
@@ -606,11 +607,13 @@ struct NavStackedBlocksView: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 2), spacing: 20) {
                 ForEach(dataManager.folders, id: \.localIdentifier) { folder in
                     Button(action: {
+                        print("DEBUG: Album \(folder.localizedTitle ?? "Unknown") tapped") // Add debug logging
                         fetchAssets(for: folder)
                     }) {
                         appleAlbumBlock(title: folder.localizedTitle ?? "Unknown Album")
                     }
                     .buttonStyle(PlainButtonStyle())
+                    .contentShape(Rectangle()) // Ensure proper touch area
                 }
             }
             .padding(.top, 8)
@@ -691,7 +694,7 @@ struct NavStackedBlocksView: View {
             .frame(height: 200)
             .overlay(
                 ZStack {
-                    // background (unchanged)
+                    // Background (unchanged)
                     if let previewImages = dataManager.sectionPreviewImages[index], !previewImages.isEmpty {
                         photoPreviewGrid(images: previewImages)
                     } else {
@@ -704,7 +707,7 @@ struct NavStackedBlocksView: View {
                             .opacity(0.7)
                     }
 
-                    // dark overlay (unchanged)
+                    // Dark overlay (unchanged)
                     RoundedRectangle(cornerRadius: 12)
                         .fill(
                             LinearGradient(
@@ -718,47 +721,48 @@ struct NavStackedBlocksView: View {
                             )
                         )
 
-                    // content (unchanged) -> this still draws the percent bottom-right
-                    VStack {
-                        Spacer()
-                        HStack(alignment: .bottom) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(blockTitles[index])
-                                    .foregroundColor(.white)
-                                    .font(.custom(AppFont.regular, size: 28))
-//                                Text(getSubtitleText(for: index))
-//                                    .foregroundColor(.white.opacity(0.8))
-//                                    .font(.custom(AppFont.regular, size: 28))
-                            }
-                            Spacer()
-                            if progress > 0 {
-                                CircularProgressView(
-                                    progress: progress,
-                                    gradient: [Color.white.opacity(0.8), Color.white.opacity(0.6)]
+                    // CONSOLIDATED OVERLAY - All content in one place
+                    ZStack {
+                        // Done overlay (if needed)
+                        if done {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(.ultraThinMaterial)
+                                .overlay(
+                                    LinearGradient(
+                                        colors: [Color.black.opacity(0.15), Color.clear],
+                                        startPoint: .bottom, endPoint: .top
+                                    )
                                 )
-                            }
+                                .allowsHitTesting(false)
                         }
-                        .padding(20)
+                        
+                        // Content overlay
+                        VStack {
+                            Spacer()
+                            HStack(alignment: .bottom) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(blockTitles[index])
+                                        .foregroundColor(.white)
+                                        .font(.custom(AppFont.regular, size: done ? 20 : 28))
+                                }
+                                Spacer()
+                                if progress > 0 {
+                                    CircularProgressView(
+                                        progress: progress,
+                                        gradient: done ?
+                                            [Color.blue.opacity(0.9), Color.blue.opacity(0.7)] :
+                                            [Color.white.opacity(0.8), Color.white.opacity(0.6)]
+                                    )
+                                }
+                            }
+                            .padding(20)
+                        }
                     }
                 }
             )
-            // add blur on top *when done*
-            .overlay(doneOverlay(done))
-            .overlay(alignment: .bottomLeading) { if done { Text(blockTitles[index]).font(.custom(AppFont.regular, size: 20))
-.foregroundColor(.white).padding(20) } }
-            // re-draw the percent above the blur so it stays crisp at 100%
-            .overlay(alignment: .bottomTrailing) {
-                if done {
-                    CircularProgressView(
-                        progress: progress,
-                        gradient: [Color.blue.opacity(0.9), Color.blue.opacity(0.7)]
-                    )
-                    .padding(20)
-                }
-            }
-            .contentShape(Rectangle())
+            // REMOVED: Multiple separate overlays
+            // REMOVED: .contentShape(Rectangle()) - moved to button level
     }
-
     
     // MARK: - Apple-style Year Block (updated to use dataManager)
     private func appleYearBlock(title: String) -> some View {
@@ -770,6 +774,7 @@ struct NavStackedBlocksView: View {
             .aspectRatio(1.3, contentMode: .fit)
             .overlay(
                 ZStack {
+                    // Background
                     if let previewImages = dataManager.yearPreviewImages[title], !previewImages.isEmpty {
                         photoPreviewGrid(images: previewImages)
                     } else {
@@ -781,6 +786,7 @@ struct NavStackedBlocksView: View {
                             ))
                     }
 
+                    // Dark overlay
                     RoundedRectangle(cornerRadius: 12)
                         .fill(
                             LinearGradient(
@@ -790,39 +796,45 @@ struct NavStackedBlocksView: View {
                             )
                         )
 
-                    VStack {
-                        Spacer()
-                        HStack(alignment: .bottom) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(title)
-                                    .foregroundColor(.white)
-                                    .font(.custom(AppFont.regular, size: 18))
-                            }
-                            Spacer()
-                            if progress > 0 {
-                                CircularProgressView(
-                                    progress: progress,
-                                    gradient: [Color.white.opacity(0.8), Color.white.opacity(0.6)]
+                    // CONSOLIDATED content overlay
+                    ZStack {
+                        if done {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(.ultraThinMaterial)
+                                .overlay(
+                                    LinearGradient(
+                                        colors: [Color.black.opacity(0.15), Color.clear],
+                                        startPoint: .bottom, endPoint: .top
+                                    )
                                 )
-                            }
+                                .allowsHitTesting(false)
                         }
-                        .padding(12)
+                        
+                        VStack {
+                            Spacer()
+                            HStack(alignment: .bottom) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(title)
+                                        .foregroundColor(.white)
+                                        .font(.custom(AppFont.regular, size: 18))
+                                }
+                                Spacer()
+                                if progress > 0 {
+                                    CircularProgressView(
+                                        progress: progress,
+                                        gradient: done ?
+                                            [Color.blue.opacity(0.9), Color.blue.opacity(0.7)] :
+                                            [Color.white.opacity(0.8), Color.white.opacity(0.6)]
+                                    )
+                                }
+                            }
+                            .padding(12)
+                        }
                     }
                 }
             )
-            .overlay(doneOverlay(done))
-            .overlay(alignment: .bottomLeading) { if done { Text(title).font(.custom(AppFont.regular, size: 18))
-.foregroundColor(.white).padding(12) } }
-            .overlay(alignment: .bottomTrailing) {
-                if done {
-                    CircularProgressView(
-                        progress: progress,
-                        gradient: [Color.blue.opacity(0.9), Color.blue.opacity(0.7)]
-                    )
-                    .padding(12)
-                }
-            }
     }
+
 
     
     // MARK: - Apple-style Album Block (updated to use dataManager)
@@ -835,6 +847,7 @@ struct NavStackedBlocksView: View {
             .aspectRatio(1.3, contentMode: .fit)
             .overlay(
                 ZStack {
+                    // Background
                     if let previewImages = dataManager.albumPreviewImages[title], !previewImages.isEmpty {
                         photoPreviewGrid(images: previewImages)
                     } else {
@@ -846,6 +859,7 @@ struct NavStackedBlocksView: View {
                             ))
                     }
 
+                    // Dark overlay
                     RoundedRectangle(cornerRadius: 12)
                         .fill(
                             LinearGradient(
@@ -855,42 +869,45 @@ struct NavStackedBlocksView: View {
                             )
                         )
 
-                    VStack {
-                        Spacer()
-                        HStack(alignment: .bottom) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(title)
-                                    .foregroundColor(.white)
-                                    .font(.custom(AppFont.regular, size: 16))
-                                    .lineLimit(2)
-                            }
-                            Spacer()
-                            if progress > 0 {
-                                CircularProgressView(
-                                    progress: progress,
-                                    gradient: [Color.white.opacity(0.8), Color.white.opacity(0.6)]
+                    // CONSOLIDATED content overlay
+                    ZStack {
+                        if done {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(.ultraThinMaterial)
+                                .overlay(
+                                    LinearGradient(
+                                        colors: [Color.black.opacity(0.15), Color.clear],
+                                        startPoint: .bottom, endPoint: .top
+                                    )
                                 )
-                            }
+                                .allowsHitTesting(false)
                         }
-                        .padding(12)
+                        
+                        VStack {
+                            Spacer()
+                            HStack(alignment: .bottom) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(title)
+                                        .foregroundColor(.white)
+                                        .font(.custom(AppFont.regular, size: 16))
+                                        .lineLimit(2)
+                                }
+                                Spacer()
+                                if progress > 0 {
+                                    CircularProgressView(
+                                        progress: progress,
+                                        gradient: done ?
+                                            [Color.blue.opacity(0.9), Color.blue.opacity(0.7)] :
+                                            [Color.white.opacity(0.8), Color.white.opacity(0.6)]
+                                    )
+                                }
+                            }
+                            .padding(12)
+                        }
                     }
                 }
             )
-            .overlay(doneOverlay(done))
-            .overlay(alignment: .bottomLeading) { if done { Text(title).font(.custom(AppFont.regular, size: 16))
-.foregroundColor(.white).lineLimit(2).padding(12) } }
-            .overlay(alignment: .bottomTrailing) {
-                if done {
-                    CircularProgressView(
-                        progress: progress,
-                        gradient: [Color.blue.opacity(0.9), Color.blue.opacity(0.7)]
-                    )
-                    .padding(12)
-                }
-            }
     }
-
-
     
     // MARK: - Photo Preview Grid (simplified to single image)
     private func photoPreviewGrid(images: [UIImage]) -> some View {
@@ -961,21 +978,6 @@ struct NavStackedBlocksView: View {
     private func isCategoryDone(_ index: Int) -> Bool { (dataManager.categoryProgress[index] ?? 0) >= 0.999 }
     private func isYearDone(_ title: String) -> Bool { (dataManager.yearProgress[title] ?? 0) >= 0.999 }
     private func isAlbumDone(_ title: String) -> Bool { (dataManager.albumProgress[title] ?? 0) >= 0.999 }
-
-    @ViewBuilder
-    private func doneOverlay(_ done: Bool) -> some View {
-        if done {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    LinearGradient(
-                        colors: [Color.black.opacity(0.15), Color.clear],
-                        startPoint: .bottom, endPoint: .top
-                    )
-                )
-                .allowsHitTesting(false)
-        }
-    }
 
     
     // MARK: - Search Logic (updated to use dataManager)
