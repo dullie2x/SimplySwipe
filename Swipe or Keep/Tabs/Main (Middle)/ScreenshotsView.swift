@@ -48,9 +48,8 @@ struct ScreenshotsView: View {
                 .padding(32)
             } else {
                 // UPDATED: Use FilteredVertScroll instead of FilteredSwipeStack
-                FilteredVertScroll(filterOptions: getScreenshotFilterOptions())
+                FilteredVertScroll(filterOptions: getScreenshotFilterOptions(), filterType: .category(1))
             }
-            
             Spacer()
         }
         .background(Color.black.ignoresSafeArea())

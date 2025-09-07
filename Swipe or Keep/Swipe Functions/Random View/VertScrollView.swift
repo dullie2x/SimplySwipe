@@ -20,7 +20,13 @@ struct VertScroll: View {
             if viewModel.isLoading {
                 MediaLoadingView(progress: viewModel.loadingProgress)
             } else if viewModel.mediaItems.isEmpty {
-                EmptyStateView()
+                EmptyStateView(
+                    onReset: {
+                        SwipedMediaManager.shared.resetAllSwipedMedia()
+                        viewModel.fetchMedia() // Refresh the view
+                    },
+                    filterDisplayName: "All Media"
+                )
             } else if !viewModel.showingEndOfGallery {
                 GeometryReader { geometry in
                     MainContentView(viewModel: viewModel, geometry: geometry)

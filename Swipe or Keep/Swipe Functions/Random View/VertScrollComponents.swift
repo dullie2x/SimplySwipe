@@ -42,20 +42,78 @@ struct MediaLoadingView: View {
 
 // MARK: - Empty State View
 struct EmptyStateView: View {
+    let onReset: (() -> Void)?
+    let filterDisplayName: String?
+    @State private var showingResetConfirmation = false
+    
     var body: some View {
-        VStack {
-            Text("No Media Found")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .foregroundColor(.blue)
-                .padding()
+        GeometryReader { geometry in
+            ZStack {
+                Color.black.ignoresSafeArea(.all)
+                
+                VStack(spacing: 30) {
+                    Spacer()
+                    
+                    VStack(spacing: 20) {
+                        Image("orca7")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: min(max(geometry.size.width * 0.35, 120), 200))
+                            .accessibilityHidden(true)
+                        
+                        Text("Looks Like You're Done")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                        
+                        Text("All device media have been reviewed")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                    
+                    Spacer()
+                    
+                    // Reset button (only show if reset callback provided)
+                    if onReset != nil {
+                        Button(action: {
+                            showingResetConfirmation = true
+                        }) {
+                            HStack {
+                                Image(systemName: "arrow.counterclockwise.circle")
+                                    .font(.system(size: 18, weight: .semibold))
+                                Text("Reset All Progress")
+                                    .font(.custom(AppFont.regular, size: 18))
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [Color.blue.opacity(0.8), Color.blue.opacity(0.8)]),
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .cornerRadius(16)
+                        }
+                        .padding(.horizontal, 40)
+                    }
+                    
+                    Spacer()
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
-        .ignoresSafeArea()
+        .alert("Reset All Progress", isPresented: $showingResetConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Reset", role: .destructive) {
+                onReset?()
+            }
+        } message: {
+            Text("This will reset ALL of your app progress")
+        }
     }
 }
-
 // MARK: - Individual Media Card Container
 struct MediaCardContainer: View {
     let asset: PHAsset

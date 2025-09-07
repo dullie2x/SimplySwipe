@@ -1,10 +1,16 @@
 //
 //  FilteredVertScrollViewModel.swift
 
-
 import SwiftUI
 import Photos
 import AVKit
+
+// MARK: - Filter Type Enum
+enum FilterType {
+    case album(PHAssetCollection)
+    case year(String)
+    case category(Int)
+}
 
 @MainActor
 class FilteredVertScrollViewModel: ObservableObject {
@@ -50,6 +56,12 @@ class FilteredVertScrollViewModel: ObservableObject {
     // Filter options
     var filterOptions: PHFetchOptions
     
+    // MARK: - Reset Functionality Properties
+    var currentFilterType: FilterType?
+    var currentCollection: PHAssetCollection?
+    var currentYear: String?
+    var currentCategoryIndex: Int?
+    
     // Dependencies
     private let cacheManager = CacheManager.shared
     private var hapticGenerator = UIImpactFeedbackGenerator(style: .heavy)
@@ -62,6 +74,72 @@ class FilteredVertScrollViewModel: ObservableObject {
     init(filterOptions: PHFetchOptions) {
         self.filterOptions = filterOptions
         hapticGenerator.prepare()
+    }
+    
+    // MARK: - Enhanced Initializer with Filter Type
+    convenience init(filterOptions: PHFetchOptions, filterType: FilterType) {
+        self.init(filterOptions: filterOptions)
+        self.currentFilterType = filterType
+        
+        // Store specific data for easy access
+        switch filterType {
+        case .album(let collection):
+            self.currentCollection = collection
+        case .year(let year):
+            self.currentYear = year
+        case .category(let index):
+            self.currentCategoryIndex = index
+        }
+    }
+    
+    // MARK: - Reset Functions
+    
+    // Reset current album/year/category
+    func resetCurrentFilter() {
+        guard let filterType = currentFilterType else {
+            print("No filter type set for reset")
+            return
+        }
+        
+        switch filterType {
+        case .album(let collection):
+            SwipedMediaManager.shared.resetAlbum(collection)
+        case .year(let year):
+            SwipedMediaManager.shared.resetYear(year)
+        case .category(let index):
+            let category: SwipedMediaManager.MediaCategory
+            switch index {
+            case 0: category = .recents
+            case 1: category = .screenshots
+            case 2: category = .favorites
+            default: return
+            }
+            SwipedMediaManager.shared.resetCategory(category)
+        }
+        
+        // Navigate back to home after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.goToHome()
+        }
+    }
+    
+    // Get display name for confirmation dialog
+    var filterDisplayName: String {
+        guard let filterType = currentFilterType else { return "this collection" }
+        
+        switch filterType {
+        case .album(let collection):
+            return collection.localizedTitle ?? "this album"
+        case .year(let year):
+            return year
+        case .category(let index):
+            switch index {
+            case 0: return "Recents"
+            case 1: return "Screenshots"
+            case 2: return "Favorites"
+            default: return "this category"
+            }
+        }
     }
     
     // MARK: - Safe Access Methods
@@ -118,11 +196,32 @@ class FilteredVertScrollViewModel: ObservableObject {
                     return
                 }
                 
+                // NEW: Check if all items are already swiped before setting up pagination
+                let swipedIdentifiers = SwipedMediaManager.shared.getSwipedMediaIdentifiers()
+                let unswipedMedia = fetchedMedia.filter { !swipedIdentifiers.contains($0.localIdentifier) }
+                
+                if unswipedMedia.isEmpty {
+                    // All items are swiped - go directly to empty state
+                    self.mediaItems = fetchedMedia
+                    self.totalMediaCount = fetchedMedia.count
+                    self.paginatedMediaItems = []
+                    self.unseenMediaItems = []
+                    self.mediaTracker.removeAll()
+                    self.previewIndex = 0
+                    self.maxBackwardIndex = 0
+                    self.seenMediaCount = fetchedMedia.count // All items have been seen
+                    self.isLoading = false
+                    self.loadingProgress = 1.0
+                    return
+                }
+                
+                // Continue with normal flow for collections with unswiped items
                 self.mediaItems = fetchedMedia
                 self.totalMediaCount = fetchedMedia.count
                 self.mediaTracker.removeAll()
                 
-                let initialBatch = Array(fetchedMedia.prefix(self.initialLoadSize))
+                // Use unswipedMedia for pagination instead of all media
+                let initialBatch = Array(unswipedMedia.prefix(self.initialLoadSize))
                 self.paginatedMediaItems = initialBatch
                 
                 // Initialize tracking for initial batch
@@ -132,11 +231,11 @@ class FilteredVertScrollViewModel: ObservableObject {
                     self.mediaTracker[item.localIdentifier] = tracker
                 }
                 
-                self.unseenMediaItems = Array(fetchedMedia.dropFirst(self.initialLoadSize))
+                self.unseenMediaItems = Array(unswipedMedia.dropFirst(self.initialLoadSize))
                 
                 self.previewIndex = 0
                 self.maxBackwardIndex = 0
-                self.seenMediaCount = 0
+                self.seenMediaCount = fetchedMedia.count - unswipedMedia.count // Count of already swiped items
                 
                 self.updateCurrentMedia()
                 self.preloadInitialContent()

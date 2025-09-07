@@ -194,6 +194,156 @@ class SwipedMediaManager: NSObject, ObservableObject {
         }
     }
     
+    // MARK: - Reset Functions for Albums/Years/Categories
+    
+    // Reset specific album's swiped media
+    func resetAlbum(_ collection: PHAssetCollection) {
+        guard let albumTitle = collection.localizedTitle else { return }
+        
+        // Get all assets in this album
+        let fetchOptions = PHFetchOptions()
+        let assets = PHAsset.fetchAssets(in: collection, options: fetchOptions)
+        
+        var albumAssetIds: Set<String> = []
+        PHAssetBatchProcessor.processBatched(fetchResult: assets, batchSize: 500) { asset in
+            albumAssetIds.insert(asset.localIdentifier)
+        }
+        
+        // Remove these assets from swiped media
+        swipedMedia.subtract(albumAssetIds)
+        trashedItems.subtract(albumAssetIds)
+        
+        // Update caches
+        for assetId in albumAssetIds {
+            assetLookupCache.removeValue(forKey: assetId)
+        }
+        
+        // Clear progress cache for this album
+        albumProgressCache.removeValue(forKey: albumTitle)
+        
+        // Save changes
+        saveSwipedMedia()
+        saveTrashedItems()
+        updateSwipeCount()
+        updateTrashedMediaAssets()
+        
+        // Notify ProgressManager
+        Task {
+            await ProgressManager.shared.invalidateCache(forAlbum: albumTitle)
+        }
+        
+        print("Reset album: \(albumTitle), removed \(albumAssetIds.count) items")
+    }
+    
+    // Reset specific year's swiped media
+    func resetYear(_ year: String) {
+        let fetchOptions = PHFetchOptions()
+        fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        let allAssets = PHAsset.fetchAssets(with: fetchOptions)
+        
+        var yearAssetIds: Set<String> = []
+        let calendar = Calendar.current
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "MMM ''yy"
+        
+        let isFullYear = year.count == 4 && Int(year) != nil
+        
+        PHAssetBatchProcessor.processBatched(fetchResult: allAssets, batchSize: 500) { asset in
+            guard let creationDate = asset.creationDate else { return }
+            
+            let matches: Bool
+            if isFullYear {
+                let assetYear = calendar.component(.year, from: creationDate)
+                matches = String(assetYear) == year
+            } else {
+                let formatted = dateFormatter.string(from: creationDate)
+                matches = formatted == year
+            }
+            
+            if matches {
+                yearAssetIds.insert(asset.localIdentifier)
+            }
+        }
+        
+        // Remove these assets from swiped media
+        swipedMedia.subtract(yearAssetIds)
+        trashedItems.subtract(yearAssetIds)
+        
+        // Update caches
+        for assetId in yearAssetIds {
+            assetLookupCache.removeValue(forKey: assetId)
+        }
+        
+        // Clear progress cache for this year
+        yearProgressCache.removeValue(forKey: year)
+        
+        // Save changes
+        saveSwipedMedia()
+        saveTrashedItems()
+        updateSwipeCount()
+        updateTrashedMediaAssets()
+        
+        // Notify ProgressManager
+        Task {
+            await ProgressManager.shared.invalidateCache(forYear: year)
+        }
+        
+        print("Reset year: \(year), removed \(yearAssetIds.count) items")
+    }
+    
+    // Reset specific category's swiped media
+    func resetCategory(_ category: MediaCategory) {
+        let fetchOptions = PHFetchOptions()
+        fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        
+        var assets: PHFetchResult<PHAsset>
+        
+        switch category {
+        case .recents:
+            let calendar = Calendar.current
+            let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: Date())!
+            fetchOptions.predicate = NSPredicate(format: "creationDate > %@", thirtyDaysAgo as NSDate)
+            assets = PHAsset.fetchAssets(with: fetchOptions)
+        case .screenshots:
+            fetchOptions.predicate = NSPredicate(format: "(mediaSubtype & %d) != 0", PHAssetMediaSubtype.photoScreenshot.rawValue)
+            assets = PHAsset.fetchAssets(with: .image, options: fetchOptions)
+        case .favorites:
+            fetchOptions.predicate = NSPredicate(format: "favorite == YES")
+            assets = PHAsset.fetchAssets(with: fetchOptions)
+        }
+        
+        var categoryAssetIds: Set<String> = []
+        PHAssetBatchProcessor.processBatched(fetchResult: assets, batchSize: 500) { asset in
+            categoryAssetIds.insert(asset.localIdentifier)
+        }
+        
+        // Remove these assets from swiped media
+        swipedMedia.subtract(categoryAssetIds)
+        trashedItems.subtract(categoryAssetIds)
+        
+        // Update caches
+        for assetId in categoryAssetIds {
+            assetLookupCache.removeValue(forKey: assetId)
+        }
+        
+        // Clear progress cache for this category
+        categoryProgressCache.removeValue(forKey: category)
+        
+        // Save changes
+        saveSwipedMedia()
+        saveTrashedItems()
+        updateSwipeCount()
+        updateTrashedMediaAssets()
+        
+        // Notify ProgressManager
+        Task {
+            let categoryIndex = category == .recents ? 0 : (category == .screenshots ? 1 : 2)
+            await ProgressManager.shared.invalidateCache(forCategory: categoryIndex)
+        }
+        
+        print("Reset category: \(category), removed \(categoryAssetIds.count) items")
+    }
+    
     // Update the swipe count
     private func updateSwipeCount() {
         swipeCount = swipedMedia.count
@@ -536,4 +686,3 @@ extension SwipedMediaManager: PHPhotoLibraryChangeObserver {
         }
     }
 }
-

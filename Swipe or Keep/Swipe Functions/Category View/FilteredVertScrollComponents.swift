@@ -36,26 +36,100 @@ struct FilteredMediaLoadingView: View {
 
 // MARK: - Filtered Empty State View
 struct FilteredEmptyStateView: View {
+    let onReset: (() -> Void)?
+    let filterDisplayName: String?
+    let onBack: (() -> Void)?
+    @State private var showingResetConfirmation = false
+    
     var body: some View {
-        VStack {
-            Image(systemName: "photo.on.rectangle")
-                .font(.system(size: 70))
-                .foregroundColor(.blue)
-            
-            Text("Nothing To Swipe Here")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-                .padding(.top, 20)
-            
-            Text("(Reset progress in settings)")
-                .font(.subheadline)
-                .foregroundColor(.gray)
-                .padding(.top, 8)
+        GeometryReader { geometry in
+            ZStack {
+                Color.black.ignoresSafeArea(.all)
+                
+                VStack(spacing: 30) {
+                    // Back button at the top
+                    HStack {
+                        if let onBack = onBack {
+                            Button(action: onBack) {
+                                Image(systemName: "arrow.left.circle")
+                                    .font(.system(size: 24, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .frame(width: 44, height: 44)
+                                    .background(
+                                        Circle()
+                                            .fill(Color.black.opacity(0.3))
+                                            .blur(radius: 10)
+                                    )
+                                    .contentShape(Circle())
+                            }
+                            .padding(.leading, 16)
+                            .padding(.top, 8)
+                        }
+                        Spacer()
+                    }
+                    
+                    Spacer()
+                    
+                    VStack(spacing: 20) {
+                        // Logo with responsive clamp (120–200pt)
+                        Image("orca7")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: min(max(geometry.size.width * 0.35, 120), 200))
+                            .accessibilityHidden(true)
+                        
+                        Text("Looks Like You're Done!")
+                            .font(.title) // was .largeTitle
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                        
+                        Text("All media in this collection have been reviewed")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    }
+                    .frame(maxWidth: 520) // keep content from stretching on iPad
+                    
+                    Spacer()
+                    
+                    // Reset button (only show if reset callback provided)
+                    if onReset != nil {
+                        Button(action: { showingResetConfirmation = true }) {
+                            HStack {
+                                Image(systemName: "arrow.counterclockwise.circle")
+                                    .font(.system(size: 18, weight: .semibold))
+                                Text("Reset Collection")
+                                    .font(.custom(AppFont.regular, size: 18))
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [Color.blue.opacity(0.8), Color.blue.opacity(0.8)]),
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .cornerRadius(16)
+                        }
+                        .padding(.horizontal, 40)
+                    }
+                    
+                    Spacer()
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
-        .ignoresSafeArea()
+        .alert("Reset Collection", isPresented: $showingResetConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Reset", role: .destructive) { onReset?() }
+        } message: {
+            Text("This resets your progress to 0%.")
+        }
     }
 }
 
@@ -240,7 +314,7 @@ struct FilteredCaptionOverlayView: View {
     }
 }
 
-// MARK: - Filtered End of Gallery Overlay View
+// MARK: - Filtered End of Gallery Overlay View (Updated with Reset)
 struct FilteredEndOfGalleryOverlayView: View {
     @ObservedObject var viewModel: FilteredVertScrollViewModel
     
@@ -250,10 +324,20 @@ struct FilteredEndOfGalleryOverlayView: View {
                 totalCount: viewModel.totalMediaCount,
                 seenCount: viewModel.seenMediaCount,
                 onRestart: viewModel.restartGallery,
-                onGoHome: viewModel.goToHome
+                onGoHome: viewModel.goToHome,
+                onReset: resetFunction,
+                albumTitle: viewModel.filterDisplayName
             )
             .transition(.opacity)
             .zIndex(10)
+        }
+    }
+    
+    private var resetFunction: (() -> Void)? {
+        if viewModel.currentFilterType != nil {
+            return viewModel.resetCurrentFilter
+        } else {
+            return nil
         }
     }
 }
