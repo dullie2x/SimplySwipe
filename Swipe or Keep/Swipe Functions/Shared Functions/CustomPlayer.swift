@@ -164,19 +164,26 @@ struct TikTokVideoPlayerView: View {
 
             // Error overlay
             if hasError {
-                VStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.title)
-                        .foregroundColor(.yellow)
-                    Text("Video Error")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    Button("Retry") {
-                        hasError = false
-                        isReady = false
-                        setupPlayer()
+                VStack {
+                    Spacer()
+                    VStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.title)
+                            .foregroundColor(.yellow)
+                        Text("Video Error")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        Button("Retry") {
+                            hasError = false
+                            isReady = false
+                            setupPlayer()
+                        }
+                        .foregroundColor(.blue)
                     }
-                    .foregroundColor(.blue)
+                    .padding()
+                    .background(Color.black.opacity(0.7))
+                    .cornerRadius(12)
+                    Spacer()
                 }
             }
 
@@ -195,8 +202,8 @@ struct TikTokVideoPlayerView: View {
                 .transition(.scale.combined(with: .opacity))
             }
         }
-        .onChange(of: isFocused) { focused in
-            handleFocusChange(focused)
+        .onChange(of: isFocused) {
+            handleFocusChange(isFocused)
         }
     }
 }
@@ -328,7 +335,7 @@ private struct BouncingLogo: View {
             let t = timeline.date.timeIntervalSinceReferenceDate
             let y = sin((2 * .pi / period) * t) * amplitude
 
-            Image("orca7")
+            Image("orca8")
                 .resizable()
                 .scaledToFit()
                 .frame(width: size, height: size)

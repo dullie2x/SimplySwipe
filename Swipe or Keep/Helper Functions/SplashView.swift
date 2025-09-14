@@ -31,7 +31,7 @@ struct SplashView: View {
                     VStack(spacing: 30) {
                         Spacer()
                         
-                        Image("orca7")
+                        Image("orca8")
                             .resizable()
                             .scaledToFit()
                             .frame(width: 180, height: 180)

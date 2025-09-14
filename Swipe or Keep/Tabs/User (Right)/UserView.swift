@@ -43,7 +43,7 @@ struct UserView: View {
                     VStack(spacing: 15) {
                         statCard(icon: "photo", title: "Photos", value: "\(photoCount)")
                         statCard(icon: "video", title: "Videos", value: "\(videoCount)")
-                        statCard(icon: "hand.tap", title: "Total Swipes", value: "\(swipeData.swipeCount)")
+                        statCard(icon: "hand.tap", title: "Total Swipes", value: "\(swipeData.totalLifetimeSwipes)")
                         statCard(icon: "arrow.left.arrow.right", title: "Swipes Remaining", value: swipesLeft, highlight: !isSubscribed)
                         
                         if !isSubscribed {
@@ -51,8 +51,7 @@ struct UserView: View {
                             statCard(
                                 icon: "plus.circle",
                                 title: "Extra Swipes",
-                                value: "\(swipeData.extraSwipes)"
-,
+                                value: "\(swipeData.extraSwipes)",
                                 highlight: true
                             )
                         }
@@ -140,6 +139,12 @@ struct UserView: View {
                 .frame(maxWidth: .infinity)
             }
             .background(Color.black.edgesIgnoringSafeArea(.all))
+            .tooltip(
+                viewName: "User",
+                title: "Your Progress & Settings",
+                message: "Track your organization progress and manage app settings.",
+                position: .center
+            )
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     refreshMediaStats()

@@ -139,9 +139,11 @@ struct Caption: View {
             }
         }
         .onAppear { updateLikeState() }
-        .onChange(of: asset.localIdentifier) { _ in
+        .onChange(of: asset.localIdentifier, initial: true) {
             updateLikeState()
-            heartScale = 1.0; showParticles = false; particleOpacity = 0.0
+            heartScale = 1.0
+            showParticles = false
+            particleOpacity = 0.0
         }
     }
     

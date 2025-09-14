@@ -24,7 +24,7 @@ struct FilteredMediaLoadingView: View {
                 let t = timeline.date.timeIntervalSinceReferenceDate
                 let y = sin((2 * .pi / 0.9) * t) * 10
                 
-                Image("orca7")
+                Image("orca8")
                     .resizable()
                     .scaledToFit()
                     .frame(width: 100, height: 100)
@@ -72,7 +72,7 @@ struct FilteredEmptyStateView: View {
                     
                     VStack(spacing: 20) {
                         // Logo with responsive clamp (120–200pt)
-                        Image("orca7")
+                        Image("orca8")
                             .resizable()
                             .scaledToFit()
                             .frame(width: min(max(geometry.size.width * 0.35, 120), 200))
@@ -197,11 +197,11 @@ struct FilteredMediaCardContainer: View {
         .rotationEffect(.degrees(rotationAngle))
         .opacity(cardOpacity)
         .zIndex(Double(viewModel.paginatedMediaItems.count - index))
-        .onTapGesture {
-            if index == viewModel.previewIndex {
-                viewModel.handleTap()
-            }
-        }
+//        .onTapGesture {
+//            if index == viewModel.previewIndex {
+//                viewModel.handleTap()
+//            }
+//        }
         // Stable ID per asset
         .id(asset.localIdentifier)
     }

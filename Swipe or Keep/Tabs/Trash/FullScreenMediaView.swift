@@ -87,13 +87,13 @@ struct FullScreenMediaView: View {
                 }
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
                 .animation(.easeInOut(duration: 0.3), value: currentIndex) // Smoother transitions
-                .onChange(of: currentIndex) { newIndex in
+                .onChange(of: currentIndex) {
                     // Preload adjacent media when index changes
-                    preloadMediaAroundIndex(newIndex)
+                    preloadMediaAroundIndex(currentIndex)
                     
                     // Stop any playing videos that are no longer visible
                     for (playerIndex, player) in videoPlayers {
-                        if playerIndex != newIndex {
+                        if playerIndex != currentIndex {
                             player.pause()
                         }
                     }
@@ -226,15 +226,15 @@ struct FullScreenMediaView: View {
                         // Let TikTokVideoPlayerView handle playback
                     }
                 }
-                .onChange(of: isMuted) { muted in
+                .onChange(of: isMuted) {
                     // Update mute state for current video only
                     if index == currentIndex {
-                        player.isMuted = muted
+                        player.isMuted = isMuted
                     }
                 }
-                .onChange(of: currentIndex) { newIndex in
+                .onChange(of: currentIndex) {
                     // Handle focus change
-                    if index == newIndex {
+                    if index == currentIndex {
                         // This video is now focused
                         player.isMuted = isMuted
                         // TikTokVideoPlayerView will handle playback based on isFocused

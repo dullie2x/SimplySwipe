@@ -31,8 +31,8 @@ struct FilteredMediaCardView: View {
         }
         .offset(offset)
         // When a new HQ image arrives, fade it in smoothly
-        .onChange(of: highQualityImage) { newValue in
-            if newValue != nil { showHQImage = true }
+        .onChange(of: highQualityImage) {
+            if highQualityImage != nil { showHQImage = true }
         }
     }
 
@@ -141,7 +141,7 @@ private struct BouncingLogo: View {
             let t = timeline.date.timeIntervalSinceReferenceDate
             let y = sin((2 * .pi / period) * t) * amplitude
 
-            Image("orca7")
+            Image("orca8")
                 .resizable()
                 .scaledToFit()
                 .frame(width: size, height: size)

@@ -47,7 +47,7 @@ struct EndOfGalleryView: View {
                     Spacer()
                     
                     // Completion Icon
-                    Image("orca7")
+                    Image("orca8")
                         .resizable()
                         .scaledToFit()
                         .frame(width: min(max(geometry.size.width * 0.35, 120), 200))
@@ -81,7 +81,7 @@ struct EndOfGalleryView: View {
                                 HStack {
                                     Image(systemName: "arrow.counterclockwise.circle")
                                         .font(.system(size: 18, weight: .semibold))
-                                    Text("Reset Album")
+                                    Text("Reset Collection")
                                         .font(.custom(AppFont.regular, size: 18))
                                 }
                                 .foregroundColor(.white)
@@ -89,7 +89,7 @@ struct EndOfGalleryView: View {
                                 .frame(height: 56)
                                 .background(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [Color.orange.opacity(0.8), Color.red.opacity(0.8)]),
+                                        gradient: Gradient(colors: [Color.blue.opacity(0.8), Color.blue.opacity(0.8)]),
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
@@ -121,7 +121,7 @@ struct EndOfGalleryView: View {
                     .padding(.bottom, 50)
                 }
             }
-            .alert("Reset Album", isPresented: $showingResetConfirmation) {
+            .alert("Reset Collection", isPresented: $showingResetConfirmation) {
                 Button("Cancel", role: .cancel) { }
                 Button("Reset", role: .destructive) {
                     let impactFeedback = UIImpactFeedbackGenerator(style: .heavy)

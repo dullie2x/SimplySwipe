@@ -166,8 +166,8 @@ struct PaywallView: View {
                 }
             }
         }
-        .onChange(of: storeManager.isPremium) { newValue in
-            if newValue { dismiss() }
+        .onChange(of: storeManager.isPremium) {
+            if storeManager.isPremium { dismiss() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .swipeCountChanged)) { _ in
             refreshToggle.toggle()

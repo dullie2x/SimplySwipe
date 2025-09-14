@@ -15,7 +15,7 @@ struct SettingsView: View {
                 Text("Settings")
                     .font(.custom(AppFont.regular, size: 34))
                     .foregroundColor(.white)
-                    .padding(.top, 12) // Reduced top padding to move it closer to the top
+                    .padding(.top, 12)
 
                 // Reset Swiping Progress
                 Button(action: {
@@ -38,9 +38,20 @@ struct SettingsView: View {
                     statActionCard(icon: "doc.text", title: "Terms of Use")
                 }
                 
+                // Debug button - only visible in debug builds
+                #if DEBUG
+                Button("Clear All Swipe Data") {
+                    SwipeData.shared.clearAllData()
+                }
+                .foregroundColor(.red)
+                .padding()
+                .background(Color.red.opacity(0.1))
+                .cornerRadius(8)
+                #endif
+                
                 Spacer()
             }
-            .padding(.bottom, 25) // Only keep bottom padding for spacing
+            .padding(.bottom, 25)
             .background(Color.black.edgesIgnoringSafeArea(.all))
         }
         .confirmationDialog(
@@ -90,7 +101,7 @@ struct SettingsView: View {
 
     private func resetAllProgress() {
         SwipedMediaManager.shared.resetAllSwipedMedia()
-        UserDefaults.standard.set(0, forKey: "swipeCount")
+        // Don't reset swipe counts - this preserves daily limits
     }
 }
 

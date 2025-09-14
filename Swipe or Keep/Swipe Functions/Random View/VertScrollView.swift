@@ -83,8 +83,8 @@ struct VertScroll: View {
             viewModel.cleanupOldContent()
         }
         // FIXED: Enhanced scene phase handling with gesture reset
-        .onChange(of: scenePhase) { phase in
-            switch phase {
+        .onChange(of: scenePhase) {
+            switch scenePhase {
             case .active:
                 // Single resume path through view model
                 viewModel.handleAppReturnFromBackground()
@@ -103,9 +103,9 @@ struct VertScroll: View {
             PaywallMaxView()
         }
         .hideNavBarCompat()
-        .onChange(of: viewModel.previewIndex) { newIndex in
+        .onChange(of: viewModel.previewIndex) {
             if let currentAsset = viewModel.safeCurrentAsset() {
-                print("[VertScroll] previewIndex=\(newIndex) → assetID=\(currentAsset.localIdentifier)")
+                print("[VertScroll] previewIndex=\(viewModel.previewIndex) → assetID=\(currentAsset.localIdentifier)")
             }
         }
         // ADDITIONAL FIX: Handle device orientation changes that might mess up gesture state

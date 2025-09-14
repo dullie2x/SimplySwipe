@@ -59,8 +59,6 @@ class VertScrollViewModel: ObservableObject {
     private let preloadWindow = 10  // Increased from 5
     private let maxBackwardNavigation = 12
     
-    
-    
     init() {
         hapticGenerator.prepare()
     }
@@ -171,7 +169,6 @@ class VertScrollViewModel: ObservableObject {
         }
     }
 
-    
     func updateMediaDate() {
         guard let asset = safeCurrentAsset() else {
             mediaDate = ""
@@ -308,7 +305,7 @@ class VertScrollViewModel: ObservableObject {
         case .horizontal:
             handleHorizontalSwipeEnd(value: value, geometry: geometry, canSwipe: canSwipe)
         case .vertical:
-            handleVerticalSwipeEnd(value: value, geometry: geometry, canSwipe: canSwipe)  // Add canSwipe parameter
+            handleVerticalSwipeEnd(value: value, geometry: geometry, canSwipe: canSwipe)
         case .undecided:
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                 horizontalOffset = 0
@@ -348,7 +345,6 @@ class VertScrollViewModel: ObservableObject {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                 horizontalOffset = 0
             }
-            // Show the paywall
             showPaywall = true
             return
         }
@@ -375,6 +371,9 @@ class VertScrollViewModel: ObservableObject {
         SwipedMediaManager.shared.addSwipedMedia(currentAsset, toTrash: direction == .left)
         swipeData.incrementSwipeCount()
         
+        // Top off content early for smoothness when we're nearing the end
+        ensureEnoughContent()
+        
         // Animation and advancement
         UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
         let animationDir: CGFloat = direction == .right ? 1 : -1
@@ -386,16 +385,21 @@ class VertScrollViewModel: ObservableObject {
         }
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            print("📱 Advancing from index \(self.previewIndex)")
             self.horizontalOffset = 0
-            if self.previewIndex < self.paginatedMediaItems.count - 1 {
-                self.previewIndex += 1
+            
+            let didAdvance = self.advanceForwardOrEnd()
+            if didAdvance {
+                // Keep backward limit behavior consistent with vertical swipes
+                self.maxBackwardIndex = max(0, self.previewIndex - self.maxBackwardNavigation)
+                
+                // Make sure there's always a buffer
+                self.ensureEnoughContent()
+                
+                self.updateCurrentMedia()
                 print("➡️ Advanced to index \(self.previewIndex)")
             } else {
-                self.previewIndex = 0
-                print("🔄 Wrapped to index 0")
+                print("🏁 Reached end of gallery (or showing end screen)")
             }
-            self.updateCurrentMedia()
         }
     }
     
@@ -412,7 +416,6 @@ class VertScrollViewModel: ObservableObject {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                 dragOffset = 0
             }
-            // Show the paywall
             showPaywall = true
             return
         }
@@ -430,8 +433,6 @@ class VertScrollViewModel: ObservableObject {
                     
                     handleIndexChange(from: oldIndex, to: previewIndex)
                     
-                    // Haptic feedback for successful navigation
-//                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     print("Vertical swipe down: moved to index \(previewIndex)")
                 } else {
                     // Hit the backward limit - double haptic + bounce
@@ -456,8 +457,6 @@ class VertScrollViewModel: ObservableObject {
                     
                     handleIndexChange(from: oldIndex, to: previewIndex)
                     
-                    // Haptic feedback for successful navigation
-//                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     print("Vertical swipe up: moved to index \(previewIndex)")
                 } else {
                     // At the very end - check if we've loaded everything
@@ -474,6 +473,7 @@ class VertScrollViewModel: ObservableObject {
             dragOffset = 0
         }
     }
+    
     // Add this helper function if it doesn't exist
     private func markCurrentAssetAsSeen() {
         guard let currentAsset = safeCurrentAsset() else { return }
@@ -538,7 +538,6 @@ class VertScrollViewModel: ObservableObject {
         }
     }
 
-    
     func loadMoreContent() {
         // Simple check: do we have more items to load?
         let itemsAlreadyLoaded = paginatedMediaItems.count
@@ -639,6 +638,7 @@ class VertScrollViewModel: ObservableObject {
         showingEndOfGallery = false
         NotificationCenter.default.post(name: .navigateToMainTab, object: nil)
     }
+    
     // MARK: - Preloading and Audio
 //    func initializeAudioSession() {
 //        let audioSession = AVAudioSession.sharedInstance()
@@ -776,7 +776,6 @@ class VertScrollViewModel: ObservableObject {
         // CRITICAL: Reset any stuck gesture states FIRST
         forceResetGestureStateImmediate()
         
-
         // Let cache manager handle the complex resume logic
         cacheManager.handleAppBecameActive()
         
@@ -801,5 +800,29 @@ class VertScrollViewModel: ObservableObject {
         // Clean up timers
         videoControlState.cleanup()
     }
-}
+    
+    // MARK: - Advance Helper (prevents wrap & pages content)
+    @discardableResult
+    private func advanceForwardOrEnd() -> Bool {
+        // If not at the end of what's already loaded, just move forward
+        if previewIndex < paginatedMediaItems.count - 1 {
+            previewIndex += 1
+            return true
+        }
 
+        // At the last loaded item — try to load more
+        ensureEnoughContent()
+
+        // If loading added items, advance into them
+        if previewIndex < paginatedMediaItems.count - 1 {
+            previewIndex += 1
+            return true
+        }
+
+        // Nothing more to load: we've reached the end of all media
+        if paginatedMediaItems.count >= mediaItems.count {
+            showEndOfGallery()
+        }
+        return false
+    }
+}

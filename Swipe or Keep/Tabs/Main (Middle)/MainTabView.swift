@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct MainTabView: View {
+    @StateObject private var onboardingManager = OnboardingManager.shared
     @State private var selectedTab: Tab = .main // Set the default tab to .main
 
     enum Tab {
@@ -8,26 +9,35 @@ struct MainTabView: View {
     }
 
     var body: some View {
-        VStack {
-            Spacer()
-            // Content
-            switch selectedTab {
-            case .random:
-                RandomView()
-            case .main:
-                MainView()
-            case .trash:
-                TrashView()
-            case .settings:
-                UserView()
+        ZStack {
+            VStack {
+                Spacer()
+                // Content
+                switch selectedTab {
+                case .random:
+                    RandomView()
+                case .main:
+                    MainView()
+                case .trash:
+                    TrashView()
+                case .settings:
+                    UserView()
+                }
+                Spacer()
+                // Custom Tab Bar
+                CustomTabBar(selectedTab: $selectedTab)
             }
-            Spacer()
-            // Custom Tab Bar
-            CustomTabBar(selectedTab: $selectedTab)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .navigateToMainTab)) { _ in
-            withAnimation(.spring()) {
-                selectedTab = .main
+            .onReceive(NotificationCenter.default.publisher(for: .navigateToMainTab)) { _ in
+                withAnimation(.spring()) {
+                    selectedTab = .main
+                }
+            }
+            
+            // Welcome screen overlay
+            if onboardingManager.showWelcomeScreen {
+                WelcomeScreen()
+                    .transition(.opacity)
+                    .zIndex(1000)
             }
         }
     }
@@ -81,7 +91,6 @@ struct CustomTabBar: View {
         .frame(maxWidth: .infinity)
     }
 }
-
 
 struct MainTabView_Previews: PreviewProvider {
     static var previews: some View {

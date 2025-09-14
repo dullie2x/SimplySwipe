@@ -21,7 +21,7 @@ struct MediaLoadingView: View {
             
             VStack(spacing: 16) {
                 // Bouncing logo
-                Image("orca7")
+                Image("orca8")
                     .resizable()
                     .scaledToFit()
                     .frame(width: 100, height: 100)
@@ -55,7 +55,7 @@ struct EmptyStateView: View {
                     Spacer()
                     
                     VStack(spacing: 20) {
-                        Image("orca7")
+                        Image("orca8")
                             .resizable()
                             .scaledToFit()
                             .frame(width: min(max(geometry.size.width * 0.35, 120), 200))
@@ -143,11 +143,11 @@ struct MediaCardContainer: View {
         .rotationEffect(.degrees(rotationAngle))
         .opacity(cardOpacity)
         .zIndex(Double(viewModel.paginatedMediaItems.count - index))
-        .onTapGesture {
-            if index == viewModel.previewIndex {
-                viewModel.handleTap()
-            }
-        }
+//        .onTapGesture {
+//            if index == viewModel.previewIndex {
+//                viewModel.handleTap()
+//            }
+//        }
         // IMPORTANT: do NOT tie .id to the index; keep it stable per asset only
         .id(asset.localIdentifier)
     }

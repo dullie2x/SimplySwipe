@@ -12,6 +12,26 @@ enum FilterType {
     case category(Int)
 }
 
+// MARK: - Make FilterType usable as a sheet item
+extension FilterType: Identifiable, Equatable {
+    var id: String {
+        switch self {
+        case .album(let c):     return "album:\(c.localIdentifier)"
+        case .year(let y):      return "year:\(y)"
+        case .category(let i):  return "cat:\(i)"
+        }
+    }
+
+    static func == (lhs: FilterType, rhs: FilterType) -> Bool {
+        switch (lhs, rhs) {
+        case (.year(let a), .year(let b)):         return a == b
+        case (.category(let a), .category(let b)): return a == b
+        case (.album(let a), .album(let b)):       return a.localIdentifier == b.localIdentifier
+        default:                                   return false
+        }
+    }
+}
+
 @MainActor
 class FilteredVertScrollViewModel: ObservableObject {
     // Core media data
@@ -179,8 +199,15 @@ class FilteredVertScrollViewModel: ObservableObject {
         isLoading = true
         loadingProgress = 0.0
         
-        DispatchQueue.global(qos: .userInitiated).async {
-            let result = PHAsset.fetchAssets(with: self.filterOptions)
+        Task {
+            // Capture filterOptions on main actor
+            let filterOptions = await MainActor.run { self.filterOptions }
+            
+            // Perform fetch on background thread
+            let result = await Task.detached {
+                PHAsset.fetchAssets(with: filterOptions)
+            }.value
+            
             var fetchedMedia: [PHAsset] = []
             
             autoreleasepool {
@@ -189,7 +216,7 @@ class FilteredVertScrollViewModel: ObservableObject {
                 }
             }
             
-            DispatchQueue.main.async {
+            await MainActor.run {
                 if fetchedMedia.isEmpty {
                     self.isLoading = false
                     self.loadingProgress = 1.0
@@ -437,13 +464,14 @@ class FilteredVertScrollViewModel: ObservableObject {
             resetGestureState()
         }
     }
+    
     func handleHorizontalSwipeEnd(value: DragGesture.Value, geometry: GeometryProxy, canSwipe: Bool) {
         let threshold: CGFloat = geometry.size.width * 0.3
         
-        print("Horizontal swipe: width=\(value.translation.width), threshold=\(threshold), canSwipe=\(canSwipe)")
+        print("🤏 Horizontal swipe: width=\(value.translation.width), threshold=\(threshold), canSwipe=\(canSwipe)")
         
         guard abs(value.translation.width) > threshold else {
-            print("Swipe failed: below threshold")
+            print("❌ Swipe failed: below threshold")
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                 horizontalOffset = 0
@@ -453,25 +481,24 @@ class FilteredVertScrollViewModel: ObservableObject {
         
         // Check if user can swipe - if not, show paywall
         guard canSwipe else {
-            print("No swipes remaining - showing paywall")
+            print("💳 No swipes remaining - showing paywall")
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                 horizontalOffset = 0
             }
-            // Show the paywall
             showPaywall = true
             return
         }
         
         guard let currentAsset = safeCurrentAsset() else {
-            print("No current asset")
+            print("❌ No current asset")
             return
         }
         
         let direction: SwipeDirection = value.translation.width > 0 ? .right : .left
         let id = currentAsset.localIdentifier
         
-        print("Processing swipe \(direction) for asset \(id)")
+        print("✅ Processing swipe \(direction) for asset \(id)")
         
         // Single state update
         var tracker = mediaTracker[id] ?? MediaItemTracker(identifier: id)
@@ -485,27 +512,35 @@ class FilteredVertScrollViewModel: ObservableObject {
         SwipedMediaManager.shared.addSwipedMedia(currentAsset, toTrash: direction == .left)
         swipeData.incrementSwipeCount()
         
+        // Top off content early for smoothness when we're nearing the end
+        ensureEnoughContent()
+        
         // Animation and advancement
         UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
         let animationDir: CGFloat = direction == .right ? 1 : -1
         
-        print("Starting animation: direction=\(animationDir)")
+        print("🎬 Starting animation: direction=\(animationDir)")
         
         withAnimation(.easeOut(duration: 0.3)) {
             horizontalOffset = animationDir * geometry.size.width * 1.5
         }
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            print("Advancing from index \(self.previewIndex)")
             self.horizontalOffset = 0
-            if self.previewIndex < self.paginatedMediaItems.count - 1 {
-                self.previewIndex += 1
-                print("Advanced to index \(self.previewIndex)")
+            
+            let didAdvance = self.advanceForwardOrEnd()
+            if didAdvance {
+                // Keep backward limit behavior consistent with vertical swipes
+                self.maxBackwardIndex = max(0, self.previewIndex - self.maxBackwardNavigation)
+                
+                // Make sure there's always a buffer
+                self.ensureEnoughContent()
+                
+                self.updateCurrentMedia()
+                print("➡️ Advanced to index \(self.previewIndex)")
             } else {
-                self.previewIndex = 0
-                print("Wrapped to index 0")
+                print("🏁 Reached end of gallery (or showing end screen)")
             }
-            self.updateCurrentMedia()
         }
     }
     
@@ -517,12 +552,11 @@ class FilteredVertScrollViewModel: ObservableObject {
         
         // If this action will consume a swipe and user can't swipe, show paywall
         if willConsumeSwipe && !canSwipe {
-            print("No swipes remaining - showing paywall for vertical swipe")
+            print("💳 No swipes remaining - showing paywall for vertical swipe")
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                 dragOffset = 0
             }
-            // Show the paywall
             showPaywall = true
             return
         }
@@ -540,9 +574,7 @@ class FilteredVertScrollViewModel: ObservableObject {
                     
                     handleIndexChange(from: oldIndex, to: previewIndex)
                     
-                    // Haptic feedback for successful navigation
-//                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    print("Vertical swipe down: moved to index \(previewIndex)")
+                    print("⬇️ Vertical swipe down: moved to index \(previewIndex)")
                 } else {
                     // Hit the backward limit - double haptic + bounce
                     triggerBackwardLimitFeedback()
@@ -566,14 +598,12 @@ class FilteredVertScrollViewModel: ObservableObject {
                     
                     handleIndexChange(from: oldIndex, to: previewIndex)
                     
-                    // Haptic feedback for successful navigation
-//                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    print("Vertical swipe up: moved to index \(previewIndex)")
+                    print("⬆️ Vertical swipe up: moved to index \(previewIndex)")
                 } else {
                     // At the very end - check if we've loaded everything
                     if paginatedMediaItems.count >= mediaItems.count {
                         // We're at the last item of all media - show end of gallery
-                        print("At the end of all media - showing end of gallery")
+                        print("🏁 At the end of all media - showing end of gallery")
                         showEndOfGallery()
                     } else {
                         // Try to load more content
@@ -600,7 +630,7 @@ class FilteredVertScrollViewModel: ObservableObject {
         SwipedMediaManager.shared.addSwipedMedia(currentAsset, toTrash: false)
 
         
-        print("Marked asset \(id) as seen via vertical swipe")
+        print("✅ Marked asset \(id) as seen via vertical swipe")
     }
     
     func triggerBackwardLimitFeedback() {
@@ -649,29 +679,28 @@ class FilteredVertScrollViewModel: ObservableObject {
         }
     }
 
-    // Simplify loadMoreContent:
-
     func loadMoreContent() {
-        // Simple check: do we have more items to load?
-        let itemsAlreadyLoaded = paginatedMediaItems.count
-        let totalItems = mediaItems.count
+        // Get currently swiped identifiers to filter them out
+        let swipedIdentifiers = SwipedMediaManager.shared.getSwipedMediaIdentifiers()
         
-        guard itemsAlreadyLoaded < totalItems else {
-            print("📥 All items already loaded")
+        // Find unswiped items from the remaining media
+        let itemsAlreadyLoaded = paginatedMediaItems.count
+        let remainingItems = mediaItems.dropFirst(itemsAlreadyLoaded)
+        let unswipedRemainingItems = remainingItems.filter { !swipedIdentifiers.contains($0.localIdentifier) }
+        
+        guard !unswipedRemainingItems.isEmpty else {
+            print("📥 No more unswiped items to load")
             return
         }
         
         let batchSize = 20
-        let itemsToAdd = min(batchSize, totalItems - itemsAlreadyLoaded)
-        let startIndex = itemsAlreadyLoaded
-        let endIndex = startIndex + itemsToAdd
-        
-        let nextItems = Array(mediaItems[startIndex..<endIndex])
+        let itemsToAdd = min(batchSize, unswipedRemainingItems.count)
+        let nextItems = Array(unswipedRemainingItems.prefix(itemsToAdd))
         
         // Add to displayed items
         paginatedMediaItems.append(contentsOf: nextItems)
         
-        print("📥 Added \(itemsToAdd) items. Total loaded: \(paginatedMediaItems.count)/\(totalItems)")
+        print("📥 Added \(itemsToAdd) unswiped items. Total loaded: \(paginatedMediaItems.count)")
     }
     
     func showEndOfGallery() {
@@ -712,8 +741,18 @@ class FilteredVertScrollViewModel: ObservableObject {
         // Clear ALL tracking data first
         mediaTracker.removeAll()
         
-        // Shuffle and reset
-        unseenMediaItems = mediaItems.shuffled()
+        // Get all items that haven't been swiped yet for restart
+        let swipedIdentifiers = SwipedMediaManager.shared.getSwipedMediaIdentifiers()
+        let unswipedItems = mediaItems.filter { !swipedIdentifiers.contains($0.localIdentifier) }
+        
+        if unswipedItems.isEmpty {
+            // If no unswiped items remain, use all items shuffled
+            unseenMediaItems = mediaItems.shuffled()
+        } else {
+            // Use only unswiped items, shuffled
+            unseenMediaItems = unswipedItems.shuffled()
+        }
+        
         paginatedMediaItems = Array(unseenMediaItems.prefix(initialLoadSize))
         unseenMediaItems.removeFirst(min(initialLoadSize, unseenMediaItems.count))
         
@@ -751,16 +790,6 @@ class FilteredVertScrollViewModel: ObservableObject {
         showingEndOfGallery = false
         NotificationCenter.default.post(name: .goHomeFromFiltered, object: nil)
     }
-//    // MARK: - Preloading and Audio
-//    func initializeAudioSession() {
-//        let audioSession = AVAudioSession.sharedInstance()
-//        do {
-//            try audioSession.setCategory(.playback, mode: .moviePlayback, options: [])
-//            try audioSession.setActive(true)
-//        } catch {
-//            print("Failed to set audio session: \(error)")
-//        }
-//    }
     
     func preloadInitialContent() {
         Task {
@@ -842,6 +871,12 @@ class FilteredVertScrollViewModel: ObservableObject {
         let start = max(maxBackwardIndex, previewIndex - 1)
         let end = min(previewIndex + preloadWindow, paginatedMediaItems.count)
 
+        // FIXED: Ensure start <= end to prevent range crash
+        guard start < end else {
+            print("⚠️ Invalid preload images range: start=\(start), end=\(end)")
+            return
+        }
+
         for idx in start..<end {
             let asset = paginatedMediaItems[idx]
             guard asset.mediaType == .image else { continue }
@@ -882,7 +917,6 @@ class FilteredVertScrollViewModel: ObservableObject {
         // CRITICAL: Reset any stuck gesture states FIRST
         forceResetGestureStateImmediate()
         
-        
         // Let cache manager handle the complex resume logic
         cacheManager.handleAppBecameActive()
         
@@ -906,5 +940,30 @@ class FilteredVertScrollViewModel: ObservableObject {
         
         // Clean up timers
         videoControlState.cleanup()
+    }
+    
+    // MARK: - Advance Helper (prevents wrap & pages content)
+    @discardableResult
+    private func advanceForwardOrEnd() -> Bool {
+        // If not at the end of what's already loaded, just move forward
+        if previewIndex < paginatedMediaItems.count - 1 {
+            previewIndex += 1
+            return true
+        }
+
+        // At the last loaded item — try to load more
+        ensureEnoughContent()
+
+        // If loading added items, advance into them
+        if previewIndex < paginatedMediaItems.count - 1 {
+            previewIndex += 1
+            return true
+        }
+
+        // Nothing more to load: we've reached the end of all media
+        if paginatedMediaItems.count >= mediaItems.count {
+            showEndOfGallery()
+        }
+        return false
     }
 }

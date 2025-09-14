@@ -15,21 +15,14 @@ struct TrashView: View {
     @State private var feedbackIsSuccess = true
     @State private var showRatingPrompt = false
 
-    private let gradientStart = Color(red: 0.2, green: 0.6, blue: 0.3)
-    private let gradientEnd = Color(red: 0.2, green: 0.4, blue: 0.8)
-    private let deleteColor = Color(red: 0.8, green: 0.2, blue: 0.2)
-    private let accentColor = Color(red: 0.8, green: 0.6, blue: 0.2)
+    // Updated colors for blue/black/white theme
+    private let deleteColor = Color.red
+    private let successColor = Color.blue
 
     var body: some View {
         NavigationView {
             ZStack {
-                LinearGradient(
-                    gradient: Gradient(colors: [Color.black, Color.black.opacity(0.9)]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                
+                Color.black.ignoresSafeArea()
 
                 if swipedMediaManager.trashedMediaAssets.isEmpty {
                     emptyStateView
@@ -58,6 +51,12 @@ struct TrashView: View {
                 }
             }
             .foregroundColor(.white)
+            .tooltip(
+                viewName: "Trash",
+                title: "Review Before Deleting",
+                message: "Items you swipe left appear here first.\n\nSelect items to:\n• Recover (undo delete)\n• Permanently delete\n\nThis gives you a safety net before final deletion.",
+                position: .top
+            )
             .sheet(item: $selectedAssetForFullScreen) { asset in
                 FullScreenMediaView(
                     initialAsset: asset,
@@ -106,13 +105,7 @@ struct TrashView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: 80, height: 80)
-                .foregroundStyle(
-                    LinearGradient(
-                        gradient: Gradient(colors: [gradientStart, gradientEnd]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .foregroundColor(.blue)
                 .scaleEffect(1.0)
                 .animation(
                     Animation.easeInOut(duration: 1.5)
@@ -197,13 +190,7 @@ struct TrashView: View {
                         Text("Recover")
                             .font(.custom(AppFont.regular, size: 12))
                     }
-                    .foregroundStyle(
-                        LinearGradient(
-                            gradient: Gradient(colors: [gradientStart, gradientEnd]),
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                    .foregroundColor(.blue)
                 }
                 .disabled(selectedItems.isEmpty || isDeleting || isRecovering)
 
@@ -232,7 +219,7 @@ struct TrashView: View {
     private var feedbackToast: some View {
         HStack {
             Image(systemName: feedbackIsSuccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                .foregroundColor(feedbackIsSuccess ? gradientStart : deleteColor)
+                .foregroundColor(feedbackIsSuccess ? successColor : deleteColor)
 
             Text(feedbackMessage)
                 .font(.subheadline)

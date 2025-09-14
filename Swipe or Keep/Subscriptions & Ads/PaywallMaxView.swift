@@ -178,8 +178,8 @@ struct PaywallMaxView: View {
                 }
             }
         }
-        .onChange(of: storeManager.isPremium) { newValue in
-            if newValue {
+        .onChange(of: storeManager.isPremium) {
+            if storeManager.isPremium {
                 dismiss()
             }
         }

@@ -65,7 +65,7 @@ struct NavStackedBlocksView: View {
     
     // UPDATED: Replace asset arrays with FilterType tracking
     @State private var selectedFilterType: FilterType? = nil
-    @State private var isFilteredViewPresented = false
+//    @State private var isFilteredViewPresented = false
     
     // Search state tracking
     @State private var isYearsSectionExpanded = false
@@ -118,20 +118,13 @@ struct NavStackedBlocksView: View {
         }
         
         // UPDATED: Single fullScreenCover for filtered views with FilterType
-        .fullScreenCover(isPresented: $isFilteredViewPresented, onDismiss: {
-            selectedFilterType = nil
+        .fullScreenCover(item: $selectedFilterType, onDismiss: {
             Task { await refreshProgress() }
-        }) {
-            if let filterType = selectedFilterType {
-                FilteredVertScroll(
-                    filterOptions: createFilterOptions(for: filterType),
-                    filterType: filterType
-                )
-            } else {
-                LoadingView(message: "Loading...") {
-                    isFilteredViewPresented = false
-                }
-            }
+        }) { filterType in
+            FilteredVertScroll(
+                filterOptions: createFilterOptions(for: filterType),
+                filterType: filterType
+            )
         }
     }
     
@@ -551,14 +544,13 @@ struct NavStackedBlocksView: View {
     
     // MARK: - Navigation Functions (UPDATED)
     private func navigateToYear(_ year: String) {
-        selectedFilterType = .year(year)
-        isFilteredViewPresented = true
+        selectedFilterType = .year(year)          // removed: isFilteredViewPresented = true
     }
-    
+
     private func navigateToAlbum(_ collection: PHAssetCollection) {
-        selectedFilterType = .album(collection)
-        isFilteredViewPresented = true
+        selectedFilterType = .album(collection)   // removed: isFilteredViewPresented = true
     }
+
     
     // MARK: - Filter Options Creation (UPDATED)
     private func createFilterOptions(for filterType: FilterType) -> PHFetchOptions {
@@ -673,27 +665,21 @@ struct NavStackedBlocksView: View {
         switch result.type {
         case .year:
             if let year = result.data as? String {
-                // Expand years section and navigate to that year
                 withAnimation(.easeInOut(duration: 0.5)) {
                     isYearsSectionExpanded = true
                 }
-                
-                // Small delay to allow expansion, then trigger navigation
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    navigateToYear(year)
+                    selectedFilterType = .year(year)
                 }
             }
-            
+
         case .album:
             if let folder = result.data as? PHAssetCollection {
-                // Expand albums section and navigate to that album
                 withAnimation(.easeInOut(duration: 0.5)) {
                     isAlbumsSectionExpanded = true
                 }
-                
-                // Small delay to allow expansion, then trigger navigation
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    navigateToAlbum(folder)
+                    selectedFilterType = .album(folder)
                 }
             }
         }
@@ -1308,7 +1294,7 @@ struct NavStackedBlocksView: View {
                 let t = timeline.date.timeIntervalSinceReferenceDate
                 let y = sin((2 * .pi / period) * t) * amplitude
 
-                Image("orca7")
+                Image("orca8")
                     .resizable()
                     .scaledToFit()
                     .frame(width: size, height: size)
