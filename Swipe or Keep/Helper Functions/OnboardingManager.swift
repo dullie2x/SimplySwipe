@@ -99,7 +99,7 @@ struct WelcomeScreen: View {
             title: "Swipe to Organize",
             subtitle: "Right to keep, left to delete",
             description: "Make quick decisions about thousands of photos and videos in minutes",
-            color: .green
+            color: .white
         ),
         OnboardingPage(
             icon: "shield.lefthalf.filled",
@@ -238,7 +238,7 @@ struct OnboardingPageView: View {
     @State private var iconRotation: Double = 0
 
     // Demo images (edit as you like)
-    private let demoImages = ["cat2", "cat1", "cat2", "cat1"]
+    private let demoImages = ["ade", "honey", "ade", "honey"]
 
     var body: some View {
         VStack(spacing: 32) {
@@ -315,112 +315,167 @@ struct OnboardingPageView: View {
     }
 }
 
-// MARK: - Vertical TikTok-like Demo (Paged, using provided image names)
+// MARK: - Simple Swipe Demo (One image at a time, alternating swipes)
 struct VerticalSwipeDemo: View {
     @Binding var animate: Bool
     let images: [String]
-
+    
+    @State private var currentImageIndex = 0
+    @State private var animationTimer: Timer?
+    
     var body: some View {
-        GeometryReader { proxy in
-            ScrollView(.vertical) {
-                LazyVStack(spacing: 0) {
-                    ForEach(Array(images.enumerated()), id: \.offset) { _, name in
-                        SwipeCardDemo(animate: $animate, imageName: name)
-                            .frame(maxWidth: .infinity)
-                            .containerRelativeFrame(.vertical) // full-height page
-                    }
-                }
-                .scrollTargetLayout()
-            }
-            .scrollIndicators(.never)
-            .scrollTargetBehavior(.paging)
-            .frame(height: proxy.size.height)
-            .clipShape(RoundedRectangle(cornerRadius: 24))
-            .overlay(
-                RoundedRectangle(cornerRadius: 24)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
-            )
-        }
-    }
-}
-
-// MARK: - Swipe Card (Horizontal cue anim) — uses provided image
-struct SwipeCardDemo: View {
-    @Binding var animate: Bool
-    let imageName: String
-
-    @State private var offset: CGFloat = 0
-    @State private var opacity: Double = 1.0
-    @State private var showHands = false
-    @State private var didStart = false
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color.gray.opacity(0.2))
-                .overlay(
-                    ZStack {
-                        Image(imageName)
-                            .resizable()
-                            .scaledToFill()
-                            .overlay(Color.black.opacity(0.15)) // subtle dim for contrast
-                    }
-                    .clipped()
+        GeometryReader { geometry in
+            ZStack {
+                SwipeCardDemo(
+                    imageName: images[currentImageIndex],
+                    swipeDirection: currentImageIndex % 2 == 0 ? .left : .right,
+                    animate: animate
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 20))
-                .padding(.horizontal, 24)
-                .offset(x: offset)
-                .opacity(opacity)
-                .rotationEffect(.degrees(offset * 0.06))
-
-            if showHands {
-                HStack(spacing: 80) {
-                    Image(systemName: "hand.point.left.fill")
-                        .font(.system(size: 22))
-                        .foregroundColor(.red.opacity(0.9))
-                        .opacity(offset < -20 ? 1.0 : 0.3)
-
-                    Spacer()
-
-                    Image(systemName: "hand.point.right.fill")
-                        .font(.system(size: 22))
-                        .foregroundColor(.green.opacity(0.9))
-                        .opacity(offset > 20 ? 1.0 : 0.3)
-                }
-                .padding(.horizontal, 40)
             }
-        }
-        .onChange(of: animate, initial: true) { _, newValue in
-            newValue ? startSwipeAnimation() : stopSwipeAnimation()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
-            if animate { startSwipeAnimation() }
+            if animate {
+                startAnimation()
+            }
+        }
+        .onChange(of: animate) { _, newValue in
+            if newValue {
+                startAnimation()
+            } else {
+                stopAnimation()
+            }
         }
     }
+    
+    private func startAnimation() {
+        animationTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+            withAnimation(.easeInOut(duration: 0.3)) {
+                currentImageIndex = (currentImageIndex + 1) % images.count
+            }
+        }
+    }
+    
+    private func stopAnimation() {
+        animationTimer?.invalidate()
+        animationTimer = nil
+    }
+}
 
+// MARK: - Simple Swipe Card with smooth one-direction animation
+struct SwipeCardDemo: View {
+    let imageName: String
+    let swipeDirection: SwipeDirection
+    let animate: Bool
+    
+    @State private var offset: CGFloat = 0
+    @State private var showHands = false
+    
+    enum SwipeDirection {
+        case left, right
+    }
+    
+    private var cardWidth: CGFloat { 180 }
+    private var cardHeight: CGFloat { cardWidth * 1.6 }
+    
+    var body: some View {
+        ZStack {
+            // The card with image completely locked together
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.black)
+                .frame(width: cardWidth, height: cardHeight)
+                .overlay(
+                    Image(imageName)
+                        .resizable()
+                        .frame(width: cardWidth, height: cardHeight)
+                        .clipped()
+                        .overlay(Color.black.opacity(0.15))
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+                .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
+                .offset(x: offset)
+                .rotationEffect(.degrees(offset * 0.08))
+            
+            // Hand indicators
+            if showHands {
+                HStack(spacing: cardWidth + 40) {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 40))
+                        .foregroundColor(.red.opacity(swipeDirection == .left ? 1.0 : 0.3))
+                    
+                    Image(systemName: "hand.thumbsup.fill")
+                        .font(.system(size: 40))
+                        .foregroundColor(.green.opacity(swipeDirection == .right ? 1.0 : 0.3))
+                }
+            }
+        }
+        .onAppear {
+            if animate {
+                startSwipeAnimation()
+            }
+        }
+        .onChange(of: animate) { _, newValue in
+            if newValue {
+                startSwipeAnimation()
+            } else {
+                stopSwipeAnimation()
+            }
+        }
+        .onChange(of: imageName) { _, _ in
+            if animate {
+                // Reset and restart animation for new image
+                offset = 0
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    startSwipeAnimation()
+                }
+            }
+        }
+    }
+    
     private func startSwipeAnimation() {
-        guard !didStart else { return }
-        didStart = true
         showHands = true
-
-        withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
-            offset = 70
+        
+        let targetOffset: CGFloat = swipeDirection == .left ? -80 : 80
+        
+        // Smooth one-direction animation with slight pause at the end
+        withAnimation(.easeInOut(duration: 1.2)) {
+            offset = targetOffset
         }
-        withAnimation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true)) {
-            opacity = 0.75
+        
+        // Hold position briefly, then reset for next cycle
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                offset = 0
+            }
         }
     }
-
+    
     private func stopSwipeAnimation() {
-        didStart = false
         showHands = false
-        withAnimation(.none) {
+        withAnimation(.easeInOut(duration: 0.3)) {
             offset = 0
-            opacity = 1.0
         }
     }
 }
 
+// MARK: - Previews
+#Preview {
+    WelcomeScreen()
+        .preferredColorScheme(.dark)
+}
+
+#Preview("Simple Swipe Demo") {
+    ZStack {
+        Color.black.ignoresSafeArea()
+        
+        VerticalSwipeDemo(
+            animate: .constant(true),
+            images: ["ade", "honey"]
+        )
+        .frame(height: 400)
+        .padding()
+    }
+}
 // MARK: - Enhanced Tooltip View
 struct TooltipView: View {
     let title: String
