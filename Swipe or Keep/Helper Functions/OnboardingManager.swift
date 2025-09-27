@@ -99,7 +99,7 @@ struct WelcomeScreen: View {
             title: "Swipe to Organize",
             subtitle: "Right to keep, left to delete",
             description: "Make quick decisions about thousands of photos and videos in minutes",
-            color: .white
+            color: .green
         ),
         OnboardingPage(
             icon: "shield.lefthalf.filled",
@@ -375,7 +375,7 @@ struct SwipeCardDemo: View {
         case left, right
     }
     
-    private var cardWidth: CGFloat { 180 }
+    private var cardWidth: CGFloat { 150 }
     private var cardHeight: CGFloat { cardWidth * 1.6 }
     
     var body: some View {
@@ -396,16 +396,24 @@ struct SwipeCardDemo: View {
                 .offset(x: offset)
                 .rotationEffect(.degrees(offset * 0.08))
             
-            // Hand indicators
+            // Hand indicators - only show when card is moving in that direction
             if showHands {
                 HStack(spacing: cardWidth + 40) {
+                    // Trash icon - only show when card is moving left (negative offset)
                     Image(systemName: "trash.fill")
                         .font(.system(size: 40))
-                        .foregroundColor(.red.opacity(swipeDirection == .left ? 1.0 : 0.3))
+                        .foregroundColor(.red)
+                        .opacity(offset < -10 ? 1.0 : 0.0) // Show only when significantly swiped left
+                        .scaleEffect(offset < -10 ? 1.0 : 0.8)
+                        .animation(.easeOut(duration: 0.2), value: offset)
                     
+                    // Thumbs up icon - only show when card is moving right (positive offset)
                     Image(systemName: "hand.thumbsup.fill")
                         .font(.system(size: 40))
-                        .foregroundColor(.green.opacity(swipeDirection == .right ? 1.0 : 0.3))
+                        .foregroundColor(.green)
+                        .opacity(offset > 10 ? 1.0 : 0.0) // Show only when significantly swiped right
+                        .scaleEffect(offset > 10 ? 1.0 : 0.8)
+                        .animation(.easeOut(duration: 0.2), value: offset)
                 }
             }
         }
@@ -476,7 +484,8 @@ struct SwipeCardDemo: View {
         .padding()
     }
 }
-// MARK: - Enhanced Tooltip View
+// MARK: - Floating Tooltip (Glass + Depth, no parallax)
+// MARK: - Fixed Floating Tooltip (Glass + Depth, no parallax)
 struct TooltipView: View {
     let title: String
     let message: String
@@ -484,80 +493,117 @@ struct TooltipView: View {
     let onDismiss: () -> Void
     let onSkipAll: () -> Void
 
-    enum TooltipPosition {
-        case top, bottom, center
-    }
+    enum TooltipPosition { case top, bottom, center }
+
+
 
     var body: some View {
         VStack {
-            if position == .bottom { Spacer() }
+            if position == .bottom { Spacer(minLength: 0) }
 
-            VStack(spacing: 16) {
-                // Icon + Title Row
+            // Wrap the tooltip content in a container with fixed frame
+            VStack(spacing: 14) {
+                // Header Row
                 HStack(spacing: 12) {
                     Image("orca8")
                         .resizable()
                         .scaledToFit()
                         .frame(width: 24, height: 24)
+                        .shadow(color: .white.opacity(0.3), radius: 4)
 
                     Text(title)
                         .font(.custom(AppFont.regular, size: 16))
-                        .foregroundColor(.white)
+                        .foregroundStyle(.white)
 
-                    Spacer()
+                    Spacer(minLength: 0)
 
                     Button(action: onDismiss) {
                         Image(systemName: "xmark")
                             .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.gray)
+                            .foregroundStyle(.white.opacity(0.8))
+                            .padding(6)
+                            .background(.ultraThinMaterial, in: Circle())
                     }
+                    .buttonStyle(.plain)
                 }
 
                 // Message
                 Text(message)
                     .font(.custom(AppFont.regular, size: 14))
-                    .foregroundColor(.gray)
+                    .foregroundStyle(.white.opacity(0.9))
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
 
-                // Action Buttons
+                // Buttons
                 HStack(spacing: 12) {
                     Button("Skip All", action: onSkipAll)
                         .font(.custom(AppFont.regular, size: 13))
-                        .foregroundColor(.gray)
+                        .foregroundStyle(.white.opacity(0.8))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(.thinMaterial)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(.white.opacity(0.15))
+                                )
+                        )
 
                     Spacer()
 
                     Button(action: onDismiss) {
                         Text("Got it")
                             .font(.custom(AppFont.regular, size: 13))
-                            .foregroundColor(.black)
+                            .foregroundStyle(.white)
                             .padding(.horizontal, 16)
-                            .padding(.vertical, 6)
-                            .background(Color.blue)
-                            .cornerRadius(12)
+                            .padding(.vertical, 8)
+                            .background(
+                                LinearGradient(
+                                    colors: [Color.cyan.opacity(0.8), Color.blue.opacity(0.8)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                in: RoundedRectangle(cornerRadius: 12)
+                            )
+                            .shadow(color: .blue.opacity(0.4), radius: 10, x: 0, y: 4)
                     }
                 }
             }
             .padding(16)
+            .frame(maxWidth: 320)
+            .fixedSize(horizontal: false, vertical: true) // KEY FIX: Prevent vertical stretching
             .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.black.opacity(0.95))
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.ultraThinMaterial)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 20)
+                            .strokeBorder(.white.opacity(0.15), lineWidth: 1)
                     )
+                    .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+                    .shadow(color: .blue.opacity(0.25), radius: 12, x: 0, y: 6)
             )
-            .shadow(color: Color.blue.opacity(0.2), radius: 8, x: 0, y: 4)
-            .padding(.horizontal, 24)
+            .overlay(
+                // Soft glow halo around edges
+                RoundedRectangle(cornerRadius: 22)
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color.cyan.opacity(0.3), Color.blue.opacity(0.2)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+                    .blur(radius: 4)
+            )
+            // Removed floating animation to prevent stretching issues
 
-            if position == .top { Spacer() }
+            if position == .top { Spacer(minLength: 0) }
         }
-        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+        .transition(.opacity.combined(with: .scale(scale: 0.95)))
     }
 }
-
-// MARK: - Tooltip Overlay Modifier
+// MARK: - Tooltip Overlay (translucent, media visible)
 struct TooltipOverlay: ViewModifier {
     @ObservedObject var onboardingManager = OnboardingManager.shared
     let viewName: String
@@ -577,13 +623,17 @@ struct TooltipOverlay: ViewModifier {
 
     func body(content: Content) -> some View {
         ZStack {
-            content
+            content // Keep your media visible
 
             if shouldShow {
-                Color.black.opacity(0.6)
+                // Subtle dim with visible background
+                Color.black.opacity(0.25)
                     .ignoresSafeArea()
+                    .blur(radius: 1)
                     .onTapGesture {
-                        onboardingManager.dismissTooltip(for: viewName)
+                        withAnimation(.spring(response: 0.6, dampingFraction: 0.85)) {
+                            onboardingManager.dismissTooltip(for: viewName)
+                        }
                     }
 
                 TooltipView(
@@ -591,20 +641,22 @@ struct TooltipOverlay: ViewModifier {
                     message: message,
                     position: position,
                     onDismiss: {
-                        withAnimation(.spring()) {
+                        withAnimation(.spring(response: 0.7, dampingFraction: 0.85)) {
                             onboardingManager.dismissTooltip(for: viewName)
                         }
                     },
                     onSkipAll: {
-                        withAnimation(.spring()) {
+                        withAnimation(.spring(response: 0.7, dampingFraction: 0.85)) {
                             onboardingManager.skipAllTooltips()
                         }
                     }
                 )
+                .transition(.scale(scale: 0.9).combined(with: .opacity))
             }
         }
     }
 }
+
 
 // MARK: - View Extension
 extension View {

@@ -54,8 +54,8 @@ struct TrashView: View {
             .tooltip(
                 viewName: "Trash",
                 title: "Review Before Deleting",
-                message: "Items you swipe left appear here first.\n\nSelect items to:\n• Recover (undo delete)\n• Permanently delete\n\nThis gives you a safety net before final deletion.",
-                position: .top
+                message: "Items you swipe left appear here first",
+                position: .center
             )
             .sheet(item: $selectedAssetForFullScreen) { asset in
                 FullScreenMediaView(
@@ -165,55 +165,74 @@ struct TrashView: View {
     }
 
     private var selectionToolbar: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: 12) {
             Button(action: toggleSelectAll) {
                 HStack(spacing: 6) {
                     Image(systemName: selectedItems.count == swipedMediaManager.trashedMediaAssets.count ? "checkmark.circle.fill" : "circle")
+                        .foregroundColor(.blue)
                     Text(selectedItems.count == swipedMediaManager.trashedMediaAssets.count ? "Deselect All" : "Select All")
-                        .font(.custom(AppFont.regular, size: 20))
+                        .font(.custom(AppFont.regular, size: 16))
+                        .foregroundColor(.white)
                 }
-                .foregroundColor(.white)
             }
 
             Spacer()
 
-            HStack(spacing: 20) {
+            HStack(spacing: 16) {
                 Button(action: recoverSelected) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 4) {
                         if isRecovering {
                             ProgressView()
-                                .frame(width: 16, height: 16)
-                                .tint(.white)
+                                .frame(width: 14, height: 14)
+                                .tint(.blue)
                         } else {
                             Image(systemName: "arrow.uturn.backward")
+                                .font(.system(size: 14))
+                                .foregroundColor(.blue)
                         }
                         Text("Recover")
-                            .font(.custom(AppFont.regular, size: 12))
+                            .font(.custom(AppFont.regular, size: 14))
+                            .foregroundColor(.blue)
+                            .lineLimit(1)
                     }
-                    .foregroundColor(.blue)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.blue.opacity(0.15))
+                    )
                 }
                 .disabled(selectedItems.isEmpty || isDeleting || isRecovering)
 
                 Button(action: confirmDelete) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 4) {
                         if isDeleting {
                             ProgressView()
-                                .frame(width: 16, height: 16)
-                                .tint(.white)
+                                .frame(width: 14, height: 14)
+                                .tint(.red)
                         } else {
                             Image(systemName: "trash.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(.red)
                         }
                         Text("Delete")
-                            .font(.custom(AppFont.regular, size: 12))
+                            .font(.custom(AppFont.regular, size: 14))
+                            .foregroundColor(.red)
+                            .lineLimit(1)
                     }
-                    .foregroundColor(deleteColor)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.red.opacity(0.15))
+                    )
                 }
                 .disabled(selectedItems.isEmpty || isDeleting || isRecovering)
             }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(Color.black.opacity(0.8))
+        .background(Color.black.opacity(0.9))
     }
 
     private var feedbackToast: some View {

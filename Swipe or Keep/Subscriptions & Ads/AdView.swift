@@ -8,6 +8,8 @@ struct AdView: View {
     
     @State private var adState: AdState = .initializing
     @State private var showCloseButton = false
+    @State private var rewardAlreadyGranted = false
+    @State private var hasStarted = false  // Prevent double execution
     
     var body: some View {
         ZStack {
@@ -45,7 +47,10 @@ struct AdView: View {
             }
         }
         .onAppear {
-            startAdSequence()
+            if !hasStarted {
+                hasStarted = true
+                startAdSequence()
+            }
         }
     }
     
@@ -134,7 +139,15 @@ struct AdView: View {
     }
     
     private var closeButton: some View {
-        Button(action: { dismiss() }) {
+        Button(action: {
+            // Grant reward if in error state and reward hasn't been granted yet
+            if adState == .error && !rewardAlreadyGranted {
+                SwipeData.shared.addExtraSwipes(10)
+                rewardAlreadyGranted = true
+                print("🎁 Granted fallback reward via close button")
+            }
+            dismiss()
+        }) {
             Image(systemName: "xmark.circle.fill")
                 .resizable()
                 .frame(width: 30, height: 30)
@@ -145,10 +158,11 @@ struct AdView: View {
         .buttonStyle(BorderlessButtonStyle())
     }
     
-    // UPDATED FUNCTION
+    // FIXED: Prevent double execution and better reward logic
     private func startAdSequence() {
         print("📱 AdView: Starting ad sequence")
         adState = .loading
+        rewardAlreadyGranted = false
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             guard let rootVC = findRootViewController() else {
@@ -159,24 +173,23 @@ struct AdView: View {
             
             print("🎬 AdView: Attempting to present ad from \(type(of: rootVC))")
             
-            // Important: Set to displaying BEFORE showing the ad
             adState = .displaying
             
-            // Show the ad with a completion handler
             adHelper.showRewardedAd(from: rootVC) {
                 DispatchQueue.main.async {
                     print("🏁 Ad finished / dismissed")
                     
-                    // Check reward status and set state
                     if adHelper.wasRewardEarned() {
-                        print("✅ Reward was earned, showing completed view")
+                        print("✅ Reward was earned, granting swipes and showing completed view")
+                        SwipeData.shared.addExtraSwipes(10)
+                        rewardAlreadyGranted = true
+                        print("🎁 Added 10 extra swipes. New total: \(SwipeData.shared.extraSwipes)")
                         adState = .complete
                     } else {
-                        print("⚠️ No reward earned, showing error view")
+                        print("⚠️ No reward earned, showing error view for fallback")
                         adState = .error
                     }
                     
-                    // Always show close button after ad completes
                     withAnimation {
                         showCloseButton = true
                     }
@@ -224,8 +237,14 @@ struct AdView: View {
     }
     
     private func grantRewardAndDismiss() {
-        print("🎁 AdView: Granting reward manually")
-        SwipeData.shared.addExtraSwipes(10)
+        if !rewardAlreadyGranted {
+            print("🎁 AdView: Granting fallback reward via Continue button")
+            SwipeData.shared.addExtraSwipes(10)
+            rewardAlreadyGranted = true
+            print("🎁 Fallback reward granted. New extra swipes total: \(SwipeData.shared.extraSwipes)")
+        } else {
+            print("⚠️ AdView: Reward already granted, just changing state")
+        }
         adState = .complete
     }
 }
@@ -237,8 +256,8 @@ enum AdState {
     case error
     case complete
 }
-// MARK: - Preview Provider
 
+// MARK: - Preview Provider
 struct AdView_Previews: PreviewProvider {
     static var previews: some View {
         AdView()

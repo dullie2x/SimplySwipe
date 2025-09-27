@@ -13,7 +13,7 @@ struct RandomView: View {
             .tooltip(
                 viewName: "Random",
                 title: "Random Swipe Mode",
-                message: "Swipe through all your media randomly.\n\nRight swipe = Keep\nLeft swipe = Delete\n\n",
+                message: "Swipe through all your media randomly",
                 position: .center
             )
     }

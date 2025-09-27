@@ -5,7 +5,7 @@ class AppRatingManager: ObservableObject {
     static let shared = AppRatingManager()
 
     private let userDefaults = UserDefaults.standard
-    private let ratingThreshold = 3
+    private let ratingThreshold = 1
     private let ratingPromptCounterKey = "app.rating.prompt.counter"
     private let lastRatingPromptDateKey = "app.rating.last.prompt.date"
     private let hasRatedAppKey = "app.has.rated.app"

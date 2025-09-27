@@ -150,13 +150,13 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
         }
     }
 
+    // CRITICAL FIX: Don't call completion immediately - store it to call later
     func showRewardedAd(from viewController: UIViewController, completion: (() -> Void)? = nil) {
+        // Reset reward status
         self.rewardEarned = false
 
-        // Store optional completion to run after dismissal
-        if let completion = completion {
-            self.adDismissedHandler = completion
-        }
+        // IMPORTANT: Store completion to call after ad dismisses, not now
+        self.adDismissedHandler = completion
 
         if let ad = self.rewardedAd {
             print("🎬 Presenting rewarded ad")
@@ -165,11 +165,9 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
                     guard let self = self else { return }
                     print("🎁 User earned reward!")
                     self.rewardEarned = true
+                    print("✅ AppDelegate: rewardEarned set to \(self.rewardEarned)")
 
-                    // Grant the reward here only
-                    let current = UserDefaults.standard.integer(forKey: "extraSwipes")
-                    UserDefaults.standard.set(current + 10, forKey: "extraSwipes")
-
+                    // DON'T call completion here - it will be called when ad dismisses
                     // Clear used ad
                     self.rewardedAd = nil
                 }
@@ -177,7 +175,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
         } else {
             print("⚠️ Rewarded ad not ready")
             self.loadRewardedAd()
-            // Still call completion so UI can continue
+            // Only call completion immediately if there's no ad to show
             DispatchQueue.main.async {
                 self.adDismissedHandler?()
                 self.adDismissedHandler = nil
@@ -186,19 +184,24 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
     }
 
     // MARK: - GADFullScreenContentDelegate
+
     func adDidDismissFullScreenContent(_ ad: FullScreenPresentingAd) {
         print("🏁 Ad dismissed")
+        print("📊 Final reward status in AppDelegate: \(rewardEarned)")
+
+        // IMPORTANT: Call completion FIRST while reward status is still valid
+        DispatchQueue.main.async {
+            self.adDismissedHandler?()
+            self.adDismissedHandler = nil
+            
+            // THEN reset reward status and reload ad
+            self.rewardEarned = false  // Reset AFTER completion handler runs
+        }
 
         // Reload the rewarded ad if that's what was shown
         if ad is RewardedAd {
             rewardedAd = nil
             loadRewardedAd()
-        }
-
-        // Call any waiting completion
-        DispatchQueue.main.async {
-            self.adDismissedHandler?()
-            self.adDismissedHandler = nil
         }
     }
 

@@ -15,7 +15,7 @@ struct SplashView: View {
     
     // Tunables: feel free to tweak
     private let minSplashSeconds: Double = 2.0     // minimum time the splash shows
-    private let maxSplashSeconds: Double = 12.0    // safety timeout so you never wait forever
+    private let maxSplashSeconds: Double = 8.0    // safety timeout so you never wait forever
     
     // Reference to data manager
     @StateObject private var dataManager = MediaDataManager.shared

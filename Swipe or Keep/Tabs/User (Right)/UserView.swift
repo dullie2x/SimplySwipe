@@ -44,7 +44,7 @@ struct UserView: View {
                         statCard(icon: "photo", title: "Photos", value: "\(photoCount)")
                         statCard(icon: "video", title: "Videos", value: "\(videoCount)")
                         statCard(icon: "hand.tap", title: "Total Swipes", value: "\(swipeData.totalLifetimeSwipes)")
-                        statCard(icon: "arrow.left.arrow.right", title: "Swipes Remaining", value: swipesLeft, highlight: !isSubscribed)
+                        statCard(icon: "gauge.with.dots.needle.33percent", title: "Swipes Remaining", value: swipesLeft, highlight: !isSubscribed)
                         
                         if !isSubscribed {
                             // Show Extra Swipes if not subscribed

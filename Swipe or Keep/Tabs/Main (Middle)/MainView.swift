@@ -22,7 +22,7 @@ struct MainView: View {
             .tooltip(
                 viewName: "Main",
                 title: "Browse by Categories",
-                message: "Choose how to organize your media\n• Swipe down to search",
+                message: "Choose how to organize your media",
                 position: .center
             )
             .navigationBarHidden(true)

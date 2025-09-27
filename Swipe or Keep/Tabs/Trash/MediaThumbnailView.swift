@@ -54,9 +54,6 @@ struct MediaThumbnailView: View {
     @State private var isLoading = false
     @State private var loadFailed = false
 
-    private let gradientStart = Color(red: 0.2, green: 0.6, blue: 0.3)
-    private let gradientEnd = Color(red: 0.2, green: 0.4, blue: 0.8)
-
     private var targetSize: CGSize {
         let scale = UIScreen.main.scale
         return CGSize(width: size * scale, height: size * scale)
@@ -101,14 +98,7 @@ struct MediaThumbnailView: View {
                 Group {
                     if isSelected {
                         RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [gradientStart, gradientEnd]),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 3
-                            )
+                            .strokeBorder(Color.blue, lineWidth: 3)
                     }
                 }
             )
@@ -133,11 +123,11 @@ struct MediaThumbnailView: View {
             if isSelectionMode {
                 ZStack {
                     Circle()
-                        .fill(isSelected ? gradientEnd : Color.black.opacity(0.6))
+                        .fill(isSelected ? Color.blue : Color.black.opacity(0.6))
                         .frame(width: 26, height: 26)
                         .overlay(
                             Circle()
-                                .strokeBorder(isSelected ? gradientStart : Color.white.opacity(0.7), lineWidth: 2)
+                                .strokeBorder(isSelected ? Color.blue.opacity(0.8) : Color.white.opacity(0.7), lineWidth: 2)
                         )
 
                     if isSelected {

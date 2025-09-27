@@ -30,7 +30,7 @@ class AdHelper: ObservableObject {
         }
     }
 
-    // UPDATED FUNCTION
+    // FIXED: Better reward tracking and completion handling
     func showRewardedAd(from viewController: UIViewController, completion: @escaping () -> Void) {
         guard let appDelegate = self.appDelegate else {
             print("❌ AdHelper: Could not find AppDelegate (not set)")
@@ -38,25 +38,47 @@ class AdHelper: ObservableObject {
             return
         }
 
+        // Reset reward status before showing ad
         self.rewardEarned = false
+        appDelegate.rewardEarned = false
         
         if appDelegate.rewardedAd != nil {
             print("✅ AdHelper: Showing loaded ad")
-            // Add a wrapper completion handler that will update rewardEarned
-            appDelegate.showRewardedAd(from: viewController) {
-                // Make sure to sync the reward status before calling completion
-                self.rewardEarned = appDelegate.rewardEarned
+            
+            // Pass completion to AppDelegate - it will call it after ad dismisses
+            appDelegate.showRewardedAd(from: viewController) { [weak self] in
+                // Sync reward status from AppDelegate
+                self?.rewardEarned = appDelegate.rewardEarned
+                
+                print("🎯 AdHelper: Ad completed. Reward earned: \(appDelegate.rewardEarned)")
+                print("🎯 AdHelper: Local reward status: \(self?.rewardEarned ?? false)")
+                
                 completion()
             }
         } else {
-            print("⚠️ AdHelper: No ad loaded, calling completion")
+            print("⚠️ AdHelper: No ad loaded, calling completion without reward")
             completion()
         }
     }
 
-    // UPDATED FUNCTION
+    // IMPROVED: More reliable reward checking with detailed logging
     func wasRewardEarned() -> Bool {
-        // First check our own record, then check AppDelegate's record
-        return rewardEarned || (appDelegate?.rewardEarned ?? false)
+        let appDelegateReward = appDelegate?.rewardEarned ?? false
+        let localReward = rewardEarned
+        
+        print("🔍 AdHelper: Checking reward status - Local: \(localReward), AppDelegate: \(appDelegateReward)")
+        
+        // Return true if either source indicates reward was earned
+        let finalResult = localReward || appDelegateReward
+        print("🔍 AdHelper: Final reward result: \(finalResult)")
+        
+        return finalResult
+    }
+    
+    // HELPER FUNCTION - Reset reward status (useful for debugging)
+    func resetRewardStatus() {
+        rewardEarned = false
+        appDelegate?.rewardEarned = false
+        print("🔄 AdHelper: Reset all reward statuses")
     }
 }

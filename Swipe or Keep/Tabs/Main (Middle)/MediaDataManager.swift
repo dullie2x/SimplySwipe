@@ -22,11 +22,21 @@ class MediaDataManager: ObservableObject {
     
     private init() {}
     
-    // MARK: - Main Loading Function (called from splash screen)
+    // MARK: - Main Loading Function (wait for permissions first)
     func loadAllData() async {
         print("📱 Starting to load all media data...")
         
-        // Load data in parallel for better performance
+        // CRITICAL: Request permissions FIRST before any data loading
+        let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        guard status == .authorized else {
+            print("❌ Photo access denied - cannot load media data")
+            isDataLoaded = true // Mark as "loaded" even though empty
+            return
+        }
+        
+        print("✅ Photo permissions granted, proceeding with data loading...")
+        
+        // STEP 1: Load basic data first (these can run in parallel)
         await withTaskGroup(of: Void.self) { group in
             group.addTask {
                 await self.fetchYears()
@@ -39,17 +49,27 @@ class MediaDataManager: ObservableObject {
             }
         }
         
-        // Now load preview images (these depend on years/folders being loaded)
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask {
-                await self.loadYearPreviewImages()
+        print("📊 Basic data loaded - Years: \(yearsList.count), Albums: \(folders.count)")
+        
+        // STEP 2: Only load preview images if we have data
+        if !yearsList.isEmpty || !folders.isEmpty {
+            await withTaskGroup(of: Void.self) { group in
+                if !yearsList.isEmpty {
+                    group.addTask {
+                        await self.loadYearPreviewImages()
+                    }
+                }
+                if !folders.isEmpty {
+                    group.addTask {
+                        await self.loadAlbumPreviewImages()
+                    }
+                }
+                group.addTask {
+                    await self.startProgressCalculation()
+                }
             }
-            group.addTask {
-                await self.loadAlbumPreviewImages()
-            }
-            group.addTask {
-                await self.startProgressCalculation()
-            }
+        } else {
+            print("⚠️ No years or albums found, skipping preview image loading")
         }
         
         isDataLoaded = true
@@ -75,6 +95,8 @@ class MediaDataManager: ObservableObject {
         var sortedYears: [(year: Int, yearString: String)] = [] // For year display
 
         let totalAssets = assets.count
+        
+        print("📊 Total assets found: \(totalAssets)")
         
         if totalAssets == 0 {
             self.yearsList = []
@@ -135,12 +157,6 @@ class MediaDataManager: ObservableObject {
     }
     
     private func fetchFolders() async {
-        let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
-        guard status == .authorized else {
-            print("Photo access denied")
-            return
-        }
-
         let allFolders = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil)
         var tempFolders: [PHAssetCollection] = []
         tempFolders.reserveCapacity(allFolders.count)
@@ -351,5 +367,24 @@ class MediaDataManager: ObservableObject {
         self.albumProgress = albumResults
         
         print("📊 Loaded progress data")
+    }
+}
+
+extension MediaDataManager {
+    func refreshAllProgress() async {
+        let cats = await ProgressManager.shared.getCategoryProgress()
+        categoryProgress = cats
+
+        let yrs = await ProgressManager.shared.getYearProgress(for: yearsList)
+        yearProgress = yrs
+
+        let albs = await ProgressManager.shared.getAlbumProgress(for: folders)
+        var byTitle: [String: Double] = [:]
+        for folder in folders {
+            if let title = folder.localizedTitle, let p = albs[title] {
+                byTitle[title] = p
+            }
+        }
+        albumProgress = byTitle
     }
 }

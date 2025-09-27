@@ -1,6 +1,7 @@
 import SwiftUI
 import Photos
 import AVKit
+import AVFoundation
 
 struct FullScreenMediaView: View {
     let initialAsset: PHAsset
@@ -9,15 +10,10 @@ struct FullScreenMediaView: View {
 
     @State private var currentIndex: Int
     @State private var displayedImages: [UIImage?]
-    @State private var videoPlayers: [Int: AVQueuePlayer]
+    @State private var videoPlayers: [Int: AVPlayer]
     @State private var isLoadingFullRes: [Bool]
     @State private var loadFailed: [Bool]
-    @State private var isMuted: Bool = false
-    @State private var isPlaying: Bool = false
-    
-    // Theme colors based on the app's design
-    private let gradientStart = Color(red: 0.2, green: 0.6, blue: 0.3) // Green
-    private let gradientEnd = Color(red: 0.2, green: 0.4, blue: 0.8) // Blue
+    @State private var audioSessionConfigured: Bool = false
     
     // Track visible indices for preloading
     @State private var visibleRange: Range<Int>? = nil
@@ -87,19 +83,19 @@ struct FullScreenMediaView: View {
                 }
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
                 .animation(.easeInOut(duration: 0.3), value: currentIndex) // Smoother transitions
-                .onChange(of: currentIndex) {
+                .onChange(of: currentIndex) { _, newIndex in
                     // Preload adjacent media when index changes
-                    preloadMediaAroundIndex(currentIndex)
+                    preloadMediaAroundIndex(newIndex)
                     
-                    // Stop any playing videos that are no longer visible
+                    // Pause all other videos when switching
                     for (playerIndex, player) in videoPlayers {
-                        if playerIndex != currentIndex {
+                        if playerIndex != newIndex {
                             player.pause()
                         }
                     }
                 }
                 
-                // Bottom bar with date and controls
+                // Bottom bar with date
                 HStack {
                     // Date and video info
                     VStack(alignment: .leading, spacing: 4) {
@@ -115,29 +111,13 @@ struct FullScreenMediaView: View {
                     }
                     
                     Spacer()
-                    
-                    // Mute/Unmute button for videos
-                    if currentIndex < allAssets.count, allAssets[currentIndex].mediaType == .video {
-                        Button(action: {
-                            isMuted.toggle()
-                            if let player = videoPlayers[currentIndex] {
-                                player.isMuted = isMuted
-                            }
-                        }) {
-                            Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(.white)
-                                .frame(width: 44, height: 44)
-                                .background(Color.black.opacity(0.6))
-                                .clipShape(Circle())
-                        }
-                    }
                 }
                 .padding()
                 .background(Color.black.opacity(0.6))
             }
         }
         .onAppear {
+            configureAudioSession()
             // Preload media when view appears
             preloadMediaAroundIndex(currentIndex)
         }
@@ -149,9 +129,48 @@ struct FullScreenMediaView: View {
                 player.pause()
             }
             videoPlayers.removeAll()
+            
+            // Reset audio session
+            resetAudioSession()
         }
     }
     
+    // Configure audio session for video playback
+    private func configureAudioSession() {
+        guard !audioSessionConfigured else { return }
+        
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            
+            // Set category with options that allow audio to play even in silent mode
+            try audioSession.setCategory(
+                .playback,
+                mode: .moviePlayback,
+                options: [.allowAirPlay, .allowBluetooth, .allowBluetoothA2DP, .duckOthers]
+            )
+            
+            // Activate the session with high priority
+            try audioSession.setActive(true, options: [])
+            audioSessionConfigured = true
+            print("✅ Audio session configured for video playback")
+        } catch {
+            print("❌ Failed to configure audio session: \(error)")
+        }
+    }
+    
+    // Reset audio session when leaving
+    private func resetAudioSession() {
+        if audioSessionConfigured {
+            do {
+                let audioSession = AVAudioSession.sharedInstance()
+                try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
+                audioSessionConfigured = false
+                print("Audio session deactivated")
+            } catch {
+                print("Failed to deactivate audio session: \(error)")
+            }
+        }
+    }
 
     // Image view component
     private func imageView(for index: Int) -> some View {
@@ -192,11 +211,7 @@ struct FullScreenMediaView: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
-                    .background(LinearGradient(
-                        gradient: Gradient(colors: [gradientStart, gradientEnd]),
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ))
+                    .background(Color.blue)
                     .foregroundColor(.white)
                     .cornerRadius(10)
                 }
@@ -211,37 +226,30 @@ struct FullScreenMediaView: View {
         }
     }
     
-    // Video player component using custom TikTokVideoPlayerView
+    // Video player component using default iOS VideoPlayer
     private func videoPlayerView(for index: Int) -> some View {
         ZStack {
             if let player = videoPlayers[index] {
-                TikTokVideoPlayerView(
-                    player: player,
-                    isFocused: index == currentIndex
-                )
-                .onAppear {
-                    // Only apply mute state for current video
-                    if index == currentIndex {
-                        player.isMuted = isMuted
-                        // Let TikTokVideoPlayerView handle playback
+                VideoPlayer(player: player)
+                    .id("video-\(index)-\(allAssets[index].localIdentifier)") // Unique ID to prevent reuse
+                    .onAppear {
+                        // Auto-play when video becomes visible and is current
+                        if index == currentIndex {
+                            player.seek(to: .zero) // Reset to beginning
+                            player.play()
+                        }
                     }
-                }
-                .onChange(of: isMuted) {
-                    // Update mute state for current video only
-                    if index == currentIndex {
-                        player.isMuted = isMuted
+                    .onChange(of: currentIndex) { _, newCurrentIndex in
+                        // Handle focus change
+                        if index == newCurrentIndex {
+                            // This video is now focused - play it
+                            player.seek(to: .zero) // Reset to beginning
+                            player.play()
+                        } else {
+                            // This video is no longer focused - pause it
+                            player.pause()
+                        }
                     }
-                }
-                .onChange(of: currentIndex) {
-                    // Handle focus change
-                    if index == currentIndex {
-                        // This video is now focused
-                        player.isMuted = isMuted
-                        // TikTokVideoPlayerView will handle playback based on isFocused
-                    } else {
-                        // This video is no longer focused - TikTokVideoPlayerView will pause
-                    }
-                }
             } else if loadFailed[index] {
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle")
@@ -254,15 +262,16 @@ struct FullScreenMediaView: View {
                     
                     Button("Retry") {
                         loadFailed[index] = false
+                        // Clear any existing player first
+                        if let existingPlayer = videoPlayers[index] {
+                            existingPlayer.pause()
+                            videoPlayers.removeValue(forKey: index)
+                        }
                         loadVideo(for: index)
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
-                    .background(LinearGradient(
-                        gradient: Gradient(colors: [gradientStart, gradientEnd]),
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ))
+                    .background(Color.blue)
                     .foregroundColor(.white)
                     .cornerRadius(10)
                 }
@@ -271,7 +280,10 @@ struct FullScreenMediaView: View {
                     .tint(.white)
                     .scaleEffect(1.5)
                     .onAppear {
-                        loadVideo(for: index)
+                        // Only load if we don't already have a player or it's not already loading
+                        if videoPlayers[index] == nil && !loadFailed[index] {
+                            loadVideo(for: index)
+                        }
                     }
             }
         }
@@ -407,10 +419,13 @@ struct FullScreenMediaView: View {
         }
     }
     
-    // Load video for playback - Updated to use AVQueuePlayer
+    // Load video for playback - Updated to use standard AVPlayer
     private func loadVideo(for index: Int) {
         let asset = allAssets[index]
         guard asset.mediaType == .video else { return }
+        
+        // Check if we already have a player for this index
+        guard videoPlayers[index] == nil else { return }
         
         let manager = PHImageManager.default()
         let options = PHVideoRequestOptions()
@@ -419,25 +434,19 @@ struct FullScreenMediaView: View {
         
         manager.requestPlayerItem(forVideo: asset, options: options) { playerItem, info in
             DispatchQueue.main.async {
+                // Double-check we still don't have a player (avoid race conditions)
+                guard videoPlayers[index] == nil else { return }
+                
                 if let playerItem = playerItem {
-                    let player = AVQueuePlayer(playerItem: playerItem)
+                    let player = AVPlayer(playerItem: playerItem)
                     
                     // Configure the player
-                    player.actionAtItemEnd = .pause
+                    player.actionAtItemEnd = .none // Let VideoPlayer handle looping
                     player.automaticallyWaitsToMinimizeStalling = true
-                    player.isMuted = isMuted
                     
-                    // Enable audio processing
-                    player.allowsExternalPlayback = false
-                    
-                    // Add observer for when item finishes playing
-                    NotificationCenter.default.addObserver(
-                        forName: .AVPlayerItemDidPlayToEndTime,
-                        object: playerItem,
-                        queue: .main
-                    ) { _ in
-                        isPlaying = false
-                    }
+                    // Enable external playback
+                    player.allowsExternalPlayback = true
+                    player.usesExternalPlaybackWhileExternalScreenIsActive = true
                     
                     // Store the player
                     videoPlayers[index] = player
