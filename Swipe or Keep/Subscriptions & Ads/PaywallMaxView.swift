@@ -75,8 +75,10 @@ struct PaywallMaxView: View {
                         VStack(spacing: 15) {
                             PaywallOption(
                                 title: "Unlimited Swipes - Monthly",
+                                subtitle: "Free for new customers only",
                                 price: getPriceString(for: .monthly),
-                                highlight: false,
+                                highlight: true,
+                                showFreeTrial: true,
                                 animate: $animate
                             ) {
                                 storeManager.purchase(.monthly)
@@ -85,7 +87,7 @@ struct PaywallMaxView: View {
                             PaywallOption(
                                 title: "Unlimited Swipes - Yearly",
                                 price: getPriceString(for: .yearly),
-                                highlight: true,
+                                highlight: false,
                                 animate: $animate
                             ) {
                                 storeManager.purchase(.yearly)
@@ -210,6 +212,7 @@ struct PaywallMaxView: View {
         }
     }
 }
+
 
 #Preview {
     PaywallMaxView()

@@ -74,15 +74,17 @@ struct PaywallView: View {
                     } else {
                         VStack(spacing: 15) {
                             PaywallOption(title: "Unlimited Swipes - Monthly",
+                                          subtitle: "For new customers only",
                                           price: getPriceString(for: .monthly),
-                                          highlight: false,
+                                          highlight: true,
+                                          showFreeTrial: true,
                                           animate: $animate) {
                                 storeManager.purchase(.monthly)
                             }
 
                             PaywallOption(title: "Unlimited Swipes - Yearly",
                                           price: getPriceString(for: .yearly),
-                                          highlight: true,
+                                          highlight: false,
                                           animate: $animate) {
                                 storeManager.purchase(.yearly)
                             }
@@ -203,25 +205,57 @@ struct PaywallView: View {
 // MARK: - Paywall Option
 struct PaywallOption: View {
     let title: String
+    let subtitle: String?
     let price: String
     let highlight: Bool
+    let showFreeTrial: Bool
     @Binding var animate: Bool
     let action: () -> Void
+    
+    init(title: String, subtitle: String? = nil, price: String, highlight: Bool, showFreeTrial: Bool = false, animate: Binding<Bool>, action: @escaping () -> Void) {
+        self.title = title
+        self.subtitle = subtitle
+        self.price = price
+        self.highlight = highlight
+        self.showFreeTrial = showFreeTrial
+        self._animate = animate
+        self.action = action
+    }
 
     var body: some View {
         Button(action: action) {
             HStack {
-                VStack(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(title)
                         .font(.custom(AppFont.regular, size: 15))
                         .foregroundColor(highlight ? .black : .white)
                     
+                    if let subtitle = subtitle {
+                        Text(subtitle)
+                            .font(.custom(AppFont.regular, size: 12))
+                            .foregroundColor(highlight ? .blue.opacity(0.8) : .white.opacity(0.7))
+                            .fontWeight(.medium)
+                    }
+                    
                     Text(price)
                         .font(.custom(AppFont.regular, size: 15))
                         .foregroundColor(highlight ? .red : .white.opacity(0.8))
+                        .strikethrough(highlight && showFreeTrial, color: highlight && showFreeTrial ? .red : .clear)
                 }
                 Spacer()
-                if highlight {
+                if highlight && showFreeTrial {
+                    Text("FREE TRIAL")
+                        .font(.custom(AppFont.regular, size: 11))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule()
+                                .fill(Color.blue.opacity(0.8))
+                        )
+                        .opacity(animate ? 0.8 : 1.0)
+                        .animation(.easeInOut(duration: 2).repeatForever(), value: animate)
+                } else if highlight {
                     Text("🔥 Save 58%")
                         .font(.custom(AppFont.regular, size: 12))
                         .foregroundColor(.white)
@@ -236,12 +270,12 @@ struct PaywallOption: View {
             .padding()
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(highlight ? Color.yellow.opacity(0.9) : Color.white.opacity(0.1))
-                    .shadow(color: highlight ? Color.yellow.opacity(0.5) : Color.black.opacity(0.3),
-                            radius: 10, x: 0, y: 5)
+                    .fill(highlight ? Color.white.opacity(0.95) : Color.white.opacity(0.1))
+                    .shadow(color: highlight ? Color.black.opacity(0.1) : Color.black.opacity(0.3),
+                            radius: highlight ? 8 : 5, x: 0, y: highlight ? 4 : 2)
             )
-            .scaleEffect(highlight && animate ? 1.05 : 1.0)
-            .animation(.easeInOut(duration: 0.7), value: animate)
+            .scaleEffect(highlight && animate ? 1.02 : 1.0)
+            .animation(.easeInOut(duration: 1.5), value: animate)
         }
         .padding(.vertical, highlight ? 5 : 0)
     }
