@@ -14,8 +14,8 @@ struct SplashView: View {
     @State private var loadingProgress: String = "Good things take time"
     
     // Tunables: feel free to tweak
-    private let minSplashSeconds: Double = 2.0     // minimum time the splash shows
-    private let maxSplashSeconds: Double = 8.0    // safety timeout so you never wait forever
+    private let minSplashSeconds: Double = 1.0     // minimum time the splash shows (reduced for faster loading)
+    private let maxSplashSeconds: Double = 5.0    // safety timeout so you never wait forever (reduced since we load less)
     
     // Reference to data manager
     @StateObject private var dataManager = MediaDataManager.shared

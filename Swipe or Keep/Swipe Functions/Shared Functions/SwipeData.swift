@@ -73,7 +73,6 @@ class SwipeData: ObservableObject {
                 self.totalLifetimeSwipes = oldTotalSwipes
                 self.extraSwipes = oldExtraSwipes
                 
-                print("🔄 Migrated swipe data from UserDefaults to Keychain")
                 
                 // Optionally clear UserDefaults
                 UserDefaults.standard.removeObject(forKey: "swipeCount")
@@ -92,14 +91,11 @@ class SwipeData: ObservableObject {
             if swipeCount < 100 {
                 // Use free swipe
                 swipeCount += 1
-                print("Used free swipe. Count: \(swipeCount)/100, Total lifetime: \(totalLifetimeSwipes)")
             } else if extraSwipes > 0 {
                 // Use extra swipe, don't increment daily counter but still count for stats
                 extraSwipes -= 1
-                print("Used 1 extra swipe. Remaining: \(extraSwipes), Total lifetime: \(totalLifetimeSwipes)")
             } else {
                 // No swipes available - this shouldn't happen if UI prevents it
-                print("❌ No swipes available")
                 // Don't increment anything if no swipes available
                 totalLifetimeSwipes -= 1  // Rollback the increment
                 return
@@ -107,7 +103,6 @@ class SwipeData: ObservableObject {
         } else {
             // Premium users: increment daily count for consistency (no limit)
             swipeCount += 1
-            print("Premium swipe. Daily: \(swipeCount), Total lifetime: \(totalLifetimeSwipes)")
         }
         
         // Mark that swipes have been used
@@ -118,7 +113,6 @@ class SwipeData: ObservableObject {
     
     func addExtraSwipes(_ count: Int) {
         extraSwipes += count
-        print("Added \(count) extra swipes. Total: \(extraSwipes)")
     }
     
     func refreshFromUserDefaults() {
@@ -156,9 +150,6 @@ class SwipeData: ObservableObject {
         let lastResetDate = lastResetString.flatMap { ISO8601DateFormatter().date(from: $0) } ?? .distantPast
         
         if !Calendar.current.isDate(today, inSameDayAs: lastResetDate) {
-            // Store old count for debugging
-            let oldCount = swipeCount
-            
             // Reset count but preserve extra swipes and lifetime total
             swipeCount = 0
             
@@ -166,7 +157,6 @@ class SwipeData: ObservableObject {
             let todayString = ISO8601DateFormatter().string(from: today)
             KeychainHelper.save(todayString, forKey: "lastSwipeResetDate")
             
-            print("🔄 Daily reset: \(oldCount) → 0, Extra swipes preserved: \(extraSwipes), Lifetime total: \(totalLifetimeSwipes)")
             
             // Force UI update
             DispatchQueue.main.async {
@@ -219,19 +209,20 @@ class SwipeData: ObservableObject {
     }
     
     // MARK: - Admin/Debug Functions
+    #if DEBUG
     func clearAllData() {
         KeychainHelper.save("", forKey: "swipeCount")
         KeychainHelper.save("", forKey: "totalLifetimeSwipes")
         KeychainHelper.save("", forKey: "extraSwipes")
         KeychainHelper.save("", forKey: "lastSwipeResetDate")
         KeychainHelper.save("", forKey: "hasUsedFreeSwipes")
-        
+
         swipeCount = 0
         totalLifetimeSwipes = 0
         extraSwipes = 0
-        
-        print("Cleared all swipe data from Keychain")
+
     }
+    #endif
 }
 
 // MARK: - Notification for UI Updates

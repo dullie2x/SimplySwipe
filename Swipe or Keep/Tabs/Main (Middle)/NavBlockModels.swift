@@ -18,6 +18,7 @@ struct SearchResult {
 enum SearchResultType {
     case year
     case album
+    case category(Int)
 }
 
 // MARK: - Quick Action Model

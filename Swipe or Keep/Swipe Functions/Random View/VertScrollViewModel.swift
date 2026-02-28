@@ -8,14 +8,22 @@
 import SwiftUI
 import Photos
 import AVKit
+import Combine
 
 @MainActor
 class VertScrollViewModel: ObservableObject {
+    // Static cached DateFormatter to avoid repeated allocations
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter
+    }()
+
     // Core media data
     @Published var mediaItems: [PHAsset] = []
     @Published var paginatedMediaItems: [PHAsset] = []
     @Published var unseenMediaItems: [PHAsset] = []
-    
+
     // Media tracking
     @Published var mediaTracker: [String: MediaItemTracker] = [:]
     
@@ -30,7 +38,12 @@ class VertScrollViewModel: ObservableObject {
     @Published var loadingProgress: Double = 0.0
     @Published var showShareSheet = false
     @Published var showPaywall = false
-    
+    @Published var isCurrentCardZoomed: Bool = false
+
+    // Zoom render state — transient (resets to 1x when fingers lift)
+    @Published var zoomScale: CGFloat = 1.0
+    @Published var zoomOffset: CGSize = .zero
+
     // End of gallery state
     @Published var showingEndOfGallery = false
     @Published var totalMediaCount = 0
@@ -48,19 +61,34 @@ class VertScrollViewModel: ObservableObject {
     
     // External data
     @Published var swipeCount = UserDefaults.standard.integer(forKey: "swipeCount")
-    @ObservedObject var swipeData = SwipeData.shared
+    let swipeData = SwipeData.shared
+    private var swipeDataCancellable: AnyCancellable?
     
     // Dependencies
     private let cacheManager = CacheManager.shared
     private var hapticGenerator = UIImpactFeedbackGenerator(style: .heavy)
+
+    // Dwell detection: only upgrade to full quality if user pauses on an item
+    private var dwellTask: Task<Void, Never>?
+    // Tracks the last preheat window so we can stop caching evicted assets
+    private var lastPreheatAssets: [PHAsset] = []
     
     // Configuration
     private let initialLoadSize = 20
-    private let preloadWindow = 10  // Increased from 5
+    private let preloadWindow = 3  // OPTIMIZED: Reduced from 5 to 3 (current + 3 forward)
+
+    // High-water mark: how many items from mediaItems have been pushed into paginatedMediaItems.
+    // Must NOT use paginatedMediaItems.count because trimOldContent() shrinks that array
+    // without consuming new items — using .count as an offset would replay already-seen assets.
+    private var mediaLoadedOffset = 0
     private let maxBackwardNavigation = 12
     
     init() {
         hapticGenerator.prepare()
+
+        // Forward SwipeData changes to this ViewModel's objectWillChange
+        swipeDataCancellable = SwipeData.shared.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
     }
     
     // MARK: - Safe Access Methods
@@ -76,7 +104,6 @@ class VertScrollViewModel: ObservableObject {
     // MARK: - Gesture State Management
     
     func resetGestureState() {
-        print("🔄 Resetting gesture state")
         isDragging = false
         gestureDirection = .undecided
         
@@ -88,7 +115,6 @@ class VertScrollViewModel: ObservableObject {
     }
     
     func forceResetGestureStateImmediate() {
-        print("⚡ Force resetting gesture state immediately")
         isDragging = false
         gestureDirection = .undecided
         dragOffset = 0
@@ -100,6 +126,91 @@ class VertScrollViewModel: ObservableObject {
         isLoading = true
         loadingProgress = 0.0
         
+        Task {
+            // OPTIMIZED: For large libraries (10K+ assets), don't load everything at once
+            // Instead, use lazy random sampling for better performance
+            
+            // Fetch total count first (fast)
+            let fetchOptions = PHFetchOptions()
+            fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+            
+            let result = await Task.detached {
+                PHAsset.fetchAssets(with: fetchOptions)
+            }.value
+            
+            let totalCount = result.count
+            
+            await MainActor.run {
+                
+                if totalCount == 0 {
+                    self.isLoading = false
+                    self.loadingProgress = 1.0
+                    return
+                }
+                
+                self.totalMediaCount = totalCount
+                
+                // OPTIMIZED: For large libraries (>5000), use lazy random access
+                // For smaller libraries, load all and shuffle (original behavior)
+                if totalCount > 5000 {
+                    self.fetchMediaLazy(result: result, totalCount: totalCount)
+                } else {
+                    self.fetchMediaTraditional(result: result)
+                }
+            }
+        }
+    }
+    
+    // OPTIMIZED: Lazy random sampling for large libraries
+    private func fetchMediaLazy(result: PHFetchResult<PHAsset>, totalCount: Int) {
+        // Generate random indices
+        var randomIndices = Set<Int>()
+        while randomIndices.count < min(1000, totalCount) {  // Sample max 1000 random items
+            randomIndices.insert(Int.random(in: 0..<totalCount))
+        }
+        
+        // Fetch only the random samples
+        var sampledAssets: [PHAsset] = []
+        for index in randomIndices.sorted() {
+            if index < totalCount {
+                sampledAssets.append(result.object(at: index))
+            }
+        }
+        
+        // Shuffle the sampled assets
+        sampledAssets.shuffle()
+
+        // Filter out items the user has already swiped on in previous sessions
+        let swipedIDs = SwipedMediaManager.shared.getSwipedMediaIdentifiers()
+        let filteredAssets = sampledAssets.filter { !swipedIDs.contains($0.localIdentifier) }
+
+        self.mediaItems = filteredAssets
+        self.totalMediaCount = sampledAssets.count
+        self.mediaTracker.removeAll()
+        
+        let initialBatch = Array(sampledAssets.prefix(self.initialLoadSize))
+        self.paginatedMediaItems = initialBatch
+        
+        // Initialize tracking
+        for item in initialBatch {
+            var tracker = MediaItemTracker(identifier: item.localIdentifier)
+            tracker.hasBeenSeen = false
+            self.mediaTracker[item.localIdentifier] = tracker
+        }
+        
+        self.unseenMediaItems = Array(sampledAssets.dropFirst(self.initialLoadSize))
+        self.mediaLoadedOffset = initialBatch.count
+
+        self.previewIndex = 0
+        self.maxBackwardIndex = 0
+        self.seenMediaCount = 0
+
+        self.updateCurrentMedia()
+        self.preloadInitialContent()
+    }
+    
+    // Traditional: Load all assets (for smaller libraries)
+    private func fetchMediaTraditional(result: PHFetchResult<PHAsset>) {
         DispatchQueue.global(qos: .userInitiated).async {
             MediaManager.shared.fetchMedia { fetchedMedia, _ in
                 DispatchQueue.main.async {
@@ -124,7 +235,8 @@ class VertScrollViewModel: ObservableObject {
                     }
                     
                     self.unseenMediaItems = Array(fetchedMedia.dropFirst(self.initialLoadSize))
-                    
+                    self.mediaLoadedOffset = initialBatch.count
+
                     self.previewIndex = 0
                     self.maxBackwardIndex = 0
                     self.seenMediaCount = 0
@@ -138,18 +250,23 @@ class VertScrollViewModel: ObservableObject {
     
     func updateCurrentMedia() {
         guard let currentAsset = safeCurrentAsset() else { return }
-        
+
+        // Always reset zoom when moving to a new card
+        isCurrentCardZoomed = false
+        zoomScale = 1.0
+        zoomOffset = .zero
+
         // Update UI strings
         updateMediaSize()
         updateMediaDate()
         
-        // Every video starts muted
-        currentAssetMuted = true
+        // Use global mute preference instead of always starting muted
+        currentAssetMuted = VideoMutePreference.shared.isMuted
         
         // Set active player with TikTok-style behavior
         cacheManager.setActivePlayer(for: currentAsset, autoPlay: true)
         if currentAsset.mediaType == .video {
-            cacheManager.updateVolume(for: currentAsset, muted: true)
+            cacheManager.updateVolume(for: currentAsset, muted: currentAssetMuted)
         }
         
         // ✅ Ensure the very first/just-shown card is counted as "seen" once.
@@ -167,6 +284,17 @@ class VertScrollViewModel: ObservableObject {
                 self.videoControlState.showControls = false
             }
         }
+
+        // Dwell detection: upgrade to full quality after 800ms if user hasn't swiped away
+        dwellTask?.cancel()
+        if let asset = safeCurrentAsset() {
+            let capturedAsset = asset
+            dwellTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 800_000_000) // 0.8 seconds
+                guard !Task.isCancelled, let self else { return }
+                self.cacheManager.upgradeToFullQuality(for: capturedAsset)
+            }
+        }
     }
 
     func updateMediaDate() {
@@ -174,12 +302,9 @@ class VertScrollViewModel: ObservableObject {
             mediaDate = ""
             return
         }
-        
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "MMM d, yyyy"
-        
+
         if let creationDate = asset.creationDate {
-            mediaDate = dateFormatter.string(from: creationDate)
+            mediaDate = Self.dateFormatter.string(from: creationDate)
         } else {
             mediaDate = "No date"
         }
@@ -235,8 +360,9 @@ class VertScrollViewModel: ObservableObject {
     func toggleMute() {
         guard let currentAsset = safeCurrentAsset() else { return }
         
-        // Toggle mute state for current asset
+        // Toggle mute state for current asset AND update global preference
         currentAssetMuted.toggle()
+        VideoMutePreference.shared.isMuted = currentAssetMuted
         
         // Handle audio session based on mute state
         if let appDelegate = UIApplication.shared.delegate as? AppDelegate {
@@ -255,8 +381,6 @@ class VertScrollViewModel: ObservableObject {
         }
         
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        
-        print("🔊 Current asset mute state: \(!currentAssetMuted) → \(currentAssetMuted)")
     }
     
     // MARK: - Gesture Handling
@@ -274,9 +398,61 @@ class VertScrollViewModel: ObservableObject {
         return .undecided
     }
     
+    // MARK: - Zoom Handling (window-level pinch — transient, snaps back on lift)
+
+    func handleWindowPinchBegan() {
+        isCurrentCardZoomed = true
+    }
+
+    /// Called each frame during a pinch. Applies incremental scale anchored at the
+    /// pinch centroid so the content zooms from where the fingers are.
+    func handleWindowPinchChanged(
+        deltaScale: CGFloat,
+        centroid: CGPoint,
+        centroidDelta: CGPoint,
+        cardSize: CGSize
+    ) {
+        let rawNew = zoomScale * deltaScale
+        let clampedScale = max(1.0, min(5.0, rawNew))
+        let effectiveDelta = clampedScale / zoomScale   // actual applied delta after clamping
+
+        // Centroid relative to card center (card fills the screen, so center ≈ cardSize/2)
+        let cx = centroid.x - cardSize.width  / 2
+        let cy = centroid.y - cardSize.height / 2
+
+        // Offset adjustment to keep the point under the fingers visually fixed as scale changes
+        let anchorDX = cx * zoomScale * (1 - effectiveDelta)
+        let anchorDY = cy * zoomScale * (1 - effectiveDelta)
+
+        zoomScale = clampedScale
+        zoomOffset = CGSize(
+            width:  zoomOffset.width  + anchorDX + centroidDelta.x,
+            height: zoomOffset.height + anchorDY + centroidDelta.y
+        )
+    }
+
+    func handleWindowPinchEnded() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            zoomScale = 1.0
+            zoomOffset = .zero
+        }
+        // Keep flag true briefly so handleDragEnded (which may fire in the same frame)
+        // still sees isCurrentCardZoomed == true and skips the swipe action.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.isCurrentCardZoomed = false
+        }
+    }
+
+    // MARK: - Drag Handling
+
     func handleDragChanged(value: DragGesture.Value, geometry: GeometryProxy, canSwipe: Bool) {
+        // When zoomed, ignore drag — the window pinch handles all pan-while-zoomed
+        if isCurrentCardZoomed {
+            return
+        }
+
         let currentDirection = determineGestureDirection(translation: value.translation)
-        
+
         if !isDragging {
             isDragging = true
             gestureDirection = currentDirection
@@ -301,6 +477,13 @@ class VertScrollViewModel: ObservableObject {
     }
     
     func handleDragEnded(value: DragGesture.Value, geometry: GeometryProxy, canSwipe: Bool) {
+        // If user was zooming, don't process as a swipe
+        if isCurrentCardZoomed {
+            isDragging = false
+            gestureDirection = .undecided
+            return
+        }
+
         switch gestureDirection {
         case .horizontal:
             handleHorizontalSwipeEnd(value: value, geometry: geometry, canSwipe: canSwipe)
@@ -318,7 +501,6 @@ class VertScrollViewModel: ObservableObject {
     }
     
     func handleDragCancelled() {
-        print("🚫 Drag gesture cancelled - resetting state")
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             resetGestureState()
         }
@@ -327,10 +509,7 @@ class VertScrollViewModel: ObservableObject {
     func handleHorizontalSwipeEnd(value: DragGesture.Value, geometry: GeometryProxy, canSwipe: Bool) {
         let threshold: CGFloat = geometry.size.width * 0.3
         
-        print("🤏 Horizontal swipe: width=\(value.translation.width), threshold=\(threshold), canSwipe=\(canSwipe)")
-        
         guard abs(value.translation.width) > threshold else {
-            print("❌ Swipe failed: below threshold")
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                 horizontalOffset = 0
@@ -340,7 +519,6 @@ class VertScrollViewModel: ObservableObject {
         
         // Check if user can swipe - if not, show paywall
         guard canSwipe else {
-            print("💳 No swipes remaining - showing paywall")
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                 horizontalOffset = 0
@@ -350,14 +528,11 @@ class VertScrollViewModel: ObservableObject {
         }
         
         guard let currentAsset = safeCurrentAsset() else {
-            print("❌ No current asset")
             return
         }
         
         let direction: SwipeDirection = value.translation.width > 0 ? .right : .left
         let id = currentAsset.localIdentifier
-        
-        print("✅ Processing swipe \(direction) for asset \(id)")
         
         // Single state update
         var tracker = mediaTracker[id] ?? MediaItemTracker(identifier: id)
@@ -378,27 +553,25 @@ class VertScrollViewModel: ObservableObject {
         UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
         let animationDir: CGFloat = direction == .right ? 1 : -1
         
-        print("🎬 Starting animation: direction=\(animationDir)")
-        
         withAnimation(.easeOut(duration: 0.3)) {
             horizontalOffset = animationDir * geometry.size.width * 1.5
         }
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             self.horizontalOffset = 0
-            
+
             let didAdvance = self.advanceForwardOrEnd()
             if didAdvance {
                 // Keep backward limit behavior consistent with vertical swipes
                 self.maxBackwardIndex = max(0, self.previewIndex - self.maxBackwardNavigation)
-                
+
                 // Make sure there's always a buffer
                 self.ensureEnoughContent()
-                
+
+                // Trim old items to keep the ZStack from growing unboundedly
+                self.trimOldContent()
+
                 self.updateCurrentMedia()
-                print("➡️ Advanced to index \(self.previewIndex)")
-            } else {
-                print("🏁 Reached end of gallery (or showing end screen)")
             }
         }
     }
@@ -411,7 +584,6 @@ class VertScrollViewModel: ObservableObject {
         
         // If this action will consume a swipe and user can't swipe, show paywall
         if willConsumeSwipe && !canSwipe {
-            print("No swipes remaining - showing paywall for vertical swipe")
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                 dragOffset = 0
@@ -432,8 +604,6 @@ class VertScrollViewModel: ObservableObject {
                     swipeData.incrementSwipeCount()
                     
                     handleIndexChange(from: oldIndex, to: previewIndex)
-                    
-                    print("Vertical swipe down: moved to index \(previewIndex)")
                 } else {
                     // Hit the backward limit - double haptic + bounce
                     triggerBackwardLimitFeedback()
@@ -444,25 +614,24 @@ class VertScrollViewModel: ObservableObject {
                 if previewIndex < paginatedMediaItems.count - 1 {
                     let oldIndex = previewIndex
                     previewIndex += 1
-                    
+
                     // Mark current asset as seen and increment swipe count
                     markCurrentAssetAsSeen()
                     swipeData.incrementSwipeCount()
-                    
+
                     // Update backward limit as we move forward
                     maxBackwardIndex = max(0, previewIndex - maxBackwardNavigation)
-                    
+
                     // Ensure enough content is available
                     ensureEnoughContent()
-                    
+
+                    // Trim old items to keep the ZStack from growing unboundedly
+                    trimOldContent()
+
                     handleIndexChange(from: oldIndex, to: previewIndex)
-                    
-                    print("Vertical swipe up: moved to index \(previewIndex)")
                 } else {
                     // At the very end - check if we've loaded everything
                     if paginatedMediaItems.count >= mediaItems.count {
-                        // We're at the last item of all media - show end of gallery
-                        print("At the end of all media - showing end of gallery")
                         showEndOfGallery()
                     } else {
                         // Try to load more content
@@ -489,7 +658,6 @@ class VertScrollViewModel: ObservableObject {
         // Add this line - let SwipedMediaManager filter it out
         SwipedMediaManager.shared.addSwipedMedia(currentAsset, toTrash: false)
         
-        print("Marked asset \(id) as seen via vertical swipe")
     }
     
     func triggerBackwardLimitFeedback() {
@@ -512,19 +680,10 @@ class VertScrollViewModel: ObservableObject {
     
     func handleIndexChange(from oldIndex: Int, to newIndex: Int) {
         updateCurrentMedia()
-        
-        if let currentAsset = safeCurrentAsset(), currentAsset.mediaType == .video {
-            // Cache manager now handles pausing neighbors automatically
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                self.preloadImagesOnly()
-                self.preloadCurrentVideoOnly()
-            }
-        } else {
-            DispatchQueue.main.async {
-                self.preloadContentForCurrentIndex()
-            }
-        }
+        // NOTE: Do NOT call preloadContentForCurrentIndex() here.
+        // updateCurrentMedia() already calls it. Adding a second deferred call via
+        // DispatchQueue.main.async was firing the preload twice per swipe, doubling
+        // the number of concurrent PHImageManager requests (1435 loads for 139 swipes).
     }
     
     // MARK: - Content Management
@@ -538,27 +697,32 @@ class VertScrollViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Sliding Window: Trim old items that are too far behind current position
+    // This prevents paginatedMediaItems (and the ZStack) from growing unboundedly,
+    // which would cause severe performance degradation and loading-circle freezes after
+    // many swipes. We keep maxBackwardNavigation + 2 items behind the current index.
+    func trimOldContent() {
+        let keepBackward = maxBackwardNavigation + 2
+        let trimCount = max(0, previewIndex - keepBackward)
+        guard trimCount > 0 else { return }
+
+        paginatedMediaItems.removeFirst(trimCount)
+        previewIndex     -= trimCount
+        maxBackwardIndex  = max(0, maxBackwardIndex - trimCount)
+
+    }
+
     func loadMoreContent() {
-        // Simple check: do we have more items to load?
-        let itemsAlreadyLoaded = paginatedMediaItems.count
-        let totalItems = mediaItems.count
-        
-        guard itemsAlreadyLoaded < totalItems else {
-            print("📥 All items already loaded")
-            return
-        }
-        
+        // Use mediaLoadedOffset (not paginatedMediaItems.count) so that trimOldContent()
+        // shrinking the array never causes already-seen items to be reloaded.
+        guard mediaLoadedOffset < mediaItems.count else { return }
+
         let batchSize = 20
-        let itemsToAdd = min(batchSize, totalItems - itemsAlreadyLoaded)
-        let startIndex = itemsAlreadyLoaded
-        let endIndex = startIndex + itemsToAdd
-        
-        let nextItems = Array(mediaItems[startIndex..<endIndex])
-        
-        // Add to displayed items
+        let itemsToAdd = min(batchSize, mediaItems.count - mediaLoadedOffset)
+        let nextItems = Array(mediaItems[mediaLoadedOffset..<mediaLoadedOffset + itemsToAdd])
+
+        mediaLoadedOffset += itemsToAdd
         paginatedMediaItems.append(contentsOf: nextItems)
-        
-        print("📥 Added \(itemsToAdd) items. Total loaded: \(paginatedMediaItems.count)/\(totalItems)")
     }
     
     func showEndOfGallery() {
@@ -593,16 +757,15 @@ class VertScrollViewModel: ObservableObject {
     
     // MARK: - End of Gallery Actions
     func restartGallery() {
-        print("🔄 Regular Restart: Total media items: \(mediaItems.count)")
-        print("🔄 Regular Restart: Clearing \(mediaTracker.count) tracked items")
         
         // Clear ALL tracking data first
         mediaTracker.removeAll()
         
-        // Shuffle and reset
-        unseenMediaItems = mediaItems.shuffled()
-        paginatedMediaItems = Array(unseenMediaItems.prefix(initialLoadSize))
-        unseenMediaItems.removeFirst(min(initialLoadSize, unseenMediaItems.count))
+        // Shuffle and reset — rebuild mediaItems in the new shuffled order so that
+        // mediaLoadedOffset stays consistent with mediaItems indexing.
+        mediaItems = mediaItems.shuffled()
+        paginatedMediaItems = Array(mediaItems.prefix(initialLoadSize))
+        mediaLoadedOffset = paginatedMediaItems.count
         
         // Initialize tracking for ALL items as unseen
         for item in mediaItems {  // Reset ALL items, not just initial batch
@@ -617,10 +780,6 @@ class VertScrollViewModel: ObservableObject {
         previewIndex = 0
         maxBackwardIndex = 0
         seenMediaCount = 0
-        
-        print("🔄 Regular Restart: New paginated count: \(paginatedMediaItems.count)")
-        print("🔄 Regular Restart: New unseen count: \(unseenMediaItems.count)")
-        print("🔄 Regular Restart: Reset tracking for \(mediaTracker.count) items")
         
         withAnimation {
             showingEndOfGallery = false
@@ -653,25 +812,19 @@ class VertScrollViewModel: ObservableObject {
     func preloadInitialContent() {
         Task {
             let currentPaginatedItems = paginatedMediaItems
-            let currentPreloadWindow = preloadWindow
             
-            let group = DispatchGroup()
-            for (idx, asset) in currentPaginatedItems.prefix(currentPreloadWindow).enumerated() {
-                group.enter()
-                Task {
-                    // Use progressive loading for initial content
-                    let priority: CacheManager.LoadingStage = idx == 0 ? .fullQuality : .preview
-                    self.cacheManager.preloadAssetProgressive(asset, at: idx, priority: priority)
-                    
-                    await MainActor.run {
-                        self.loadingProgress = Double(idx + 1) / Double(min(currentPreloadWindow, currentPaginatedItems.count))
-                    }
-                    group.leave()
+            // OPTIMIZED: Load ONLY the first item before showing UI
+            if let firstAsset = currentPaginatedItems.first {
+                // Load first item with full quality (fast path)
+                await MainActor.run {
+                    self.loadingProgress = 0.5
                 }
-            }
-            
-            group.notify(queue: .main) {
-                Task { @MainActor in
+                
+                self.cacheManager.preloadAssetProgressive(firstAsset, at: 0, priority: .fullQuality)
+                
+                // Show UI immediately after first item starts loading
+                await MainActor.run {
+                    self.loadingProgress = 1.0
                     self.isLoading = false
                     
                     // Auto-play through cache manager (TikTok style)
@@ -686,16 +839,35 @@ class VertScrollViewModel: ObservableObject {
                     }
                 }
             }
+            
+            // BACKGROUND: Preload the next items after UI is shown
+            Task.detached(priority: .userInitiated) {
+                // Preload items 1-4 (immediate neighbors)
+                // Use preview quality for faster loads (full quality loads on-demand when viewed)
+                for idx in 1..<min(5, currentPaginatedItems.count) {
+                    let asset = currentPaginatedItems[idx]
+                    // Videos get preview, images get preview (faster than full quality)
+                    await self.cacheManager.preloadAssetProgressive(asset, at: idx, priority: .preview)
+                }
+                
+                // Preload items 5-9 (further items) with thumbnail quality only
+                if currentPaginatedItems.count > 5 {
+                    for idx in 5..<min(10, currentPaginatedItems.count) {
+                        let asset = currentPaginatedItems[idx]
+                        await self.cacheManager.preloadAssetProgressive(asset, at: idx, priority: .thumbnail)
+                    }
+                }
+            }
         }
     }
 
     func preloadContentForCurrentIndex() {
-        let start = max(maxBackwardIndex, previewIndex - 1)
-        let end = min(previewIndex + preloadWindow, paginatedMediaItems.count)
+        // OPTIMIZED: Reduced preload range to ±3 (window=3)
+        // Bidirectional: load 2 back, current, 3 forward = 6 items total
+        let start = max(maxBackwardIndex, previewIndex - 2)  // 2 back for smooth reverse nav
+        let end = min(previewIndex + preloadWindow + 1, paginatedMediaItems.count)  // +1 to include current
         
-        // FIXED: Ensure start <= end to prevent range crash
         guard start < end else {
-            print("⚠️ Invalid preload range: start=\(start), end=\(end)")
             return
         }
         
@@ -704,65 +876,57 @@ class VertScrollViewModel: ObservableObject {
             let asset = paginatedMediaItems[idx]
             let distance = abs(idx - previewIndex)
             
-            // Progressive loading based on distance
+            // OPTIMIZED: Tier-based preloading
+            // Tier 0: Current (distance 0)
+            // Tier 1: ±1 (distance 1)
+            // Tier 2: ±2 (distance 2)
+            // Tier 3: +3 forward only (distance 3+)
             let priority: CacheManager.LoadingStage
-            switch distance {
-            case 0:
-                // Current asset: Load full quality
-                priority = .fullQuality
-            case 1...2:
-                // Next/previous: Load preview quality
-                priority = .preview
-            default:
-                // Distant: Load thumbnails only
-                priority = .thumbnail
+            
+            if asset.mediaType == .video {
+                switch distance {
+                case 0, 1:
+                    priority = .fullQuality  // Current + ±1: Buffer video for instant playback
+                default:
+                    priority = .thumbnail    // Further: poster frame only
+                }
+            } else {
+                switch distance {
+                case 0:
+                    priority = .preview      // Current image: fast degraded via .opportunistic (dwell will upgrade)
+                case 1:
+                    priority = .preview      // ±1: Screen-size preview
+                default:
+                    priority = .thumbnail    // Further: thumbnail only
+                }
             }
             
             Task {
                 cacheManager.preloadAssetProgressive(asset, at: idx, priority: priority)
             }
         }
-    }
 
-    func preloadImagesOnly() {
-        guard paginatedMediaItems.indices.contains(previewIndex) else { return }
+        // Preheat thumbnails for the next 15 items using PHCachingImageManager.
+        // This is cheap (system-level I/O coalescing) and eliminates pop-in for fast swipers.
+        let preheatEnd = min(previewIndex + 16, paginatedMediaItems.count)
+        if preheatEnd > previewIndex {
+            let newPreheatAssets = Array(paginatedMediaItems[previewIndex..<preheatEnd])
 
-        let start = max(maxBackwardIndex, previewIndex - 1)
-        let end = min(previewIndex + preloadWindow, paginatedMediaItems.count)
-
-        // FIXED: Ensure start <= end to prevent range crash
-        guard start < end else {
-            print("⚠️ Invalid preload images range: start=\(start), end=\(end)")
-            return
-        }
-
-        for idx in start..<end {
-            let asset = paginatedMediaItems[idx]
-            guard asset.mediaType == .image else { continue }
-
-            Task {
-                cacheManager.preloadAsset(asset, at: idx)
+            // Stop caching assets that fell out of the window
+            let newIDs = Set(newPreheatAssets.map { $0.localIdentifier })
+            let evicted = lastPreheatAssets.filter { !newIDs.contains($0.localIdentifier) }
+            if !evicted.isEmpty {
+                cacheManager.stopPreheatingThumbnails(for: evicted)
             }
+
+            cacheManager.preheatThumbnails(for: newPreheatAssets)
+            lastPreheatAssets = newPreheatAssets
         }
     }
 
-    func preloadCurrentVideoOnly() {
-        guard let currentAsset = safeCurrentAsset() else { return }
-
-        if currentAsset.mediaType == .video {
-            Task {
-                cacheManager.preloadAsset(currentAsset, at: previewIndex)
-            }
-        }
-
-        let nextIndex = previewIndex + 1
-        if let nextAsset = safeAsset(at: nextIndex), nextAsset.mediaType == .video {
-            Task {
-                cacheManager.preloadAsset(nextAsset, at: nextIndex)
-            }
-        }
-    }
-
+    // REMOVED: preloadImagesOnly() and preloadCurrentVideoOnly()
+    // These were part of the OLD dual preload system - now using ONLY preloadContentForCurrentIndex()
+    
     func cleanupOldContent() {
         guard let currentAsset = safeCurrentAsset() else { return }
         cacheManager.cleanup(around: currentAsset, window: preloadWindow)
@@ -771,29 +935,27 @@ class VertScrollViewModel: ObservableObject {
     // MARK: - TikTok-Style Background/Foreground Handling (FIXED)
     
     func handleAppReturnFromBackground() {
-        print("📱 App returning from background")
-        
-        // CRITICAL: Reset any stuck gesture states FIRST
+        // CRITICAL: Reset any stuck gesture states immediately on main thread
         forceResetGestureStateImmediate()
-        
-        // Let cache manager handle the complex resume logic
-        cacheManager.handleAppBecameActive()
-        
-        // Update current media to ensure UI is in sync
+
+        // Update UI synchronously — fast, must stay on main thread
         updateCurrentMedia()
-        
-        // Light cleanup to remove any stale content
-        cleanupOldContent()
-        
-        // Continue preloading around current position
-        preloadContentForCurrentIndex()
-        
-        print("✅ App returned from background - resume complete")
+
+        // Check for daily swipe reset in case the day rolled over while in background
+        SwipeData.shared.resetIfNeeded()
+
+        // Defer the heavy work so the scene transition completes first,
+        // preventing the 0x8BADF00D watchdog from killing the app
+        Task {
+            cacheManager.handleAppBecameActive()
+            await MainActor.run {
+                cleanupOldContent()
+                preloadContentForCurrentIndex()
+            }
+        }
     }
     
     func handleAppWillEnterBackground() {
-        print("📱 App entering background")
-        
         // Reset gesture state to prevent stuck states
         forceResetGestureStateImmediate()
         

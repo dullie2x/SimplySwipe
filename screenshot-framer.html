@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simply Swipe — Screenshot Framer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&family=Poppins:wght@400;700;800&family=Montserrat:wght@400;700;800&family=Nunito:wght@400;700;800&family=Raleway:wght@400;700;800&family=Playfair+Display:wght@400;700&family=DM+Sans:wght@400;700&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --sidebar: 300px;
+  --bg: #0d0d0f;
+  --surface: #1c1c1e;
+  --surface2: #2c2c2e;
+  --border: #3a3a3c;
+  --text: #fff;
+  --text2: #aaa;
+  --text3: #666;
+  --accent: #0a84ff;
+}
+
+body {
+  background: var(--bg);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  width: var(--sidebar);
+  min-height: 100vh;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+.sidebar-header {
+  padding: 22px 20px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-header h1 { font-size: 16px; font-weight: 700; }
+.sidebar-header p  { font-size: 12px; color: var(--text3); margin-top: 3px; }
+
+.sidebar-section {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.section-title {
+  font-size: 11px; font-weight: 700; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.8px;
+}
+
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field-label {
+  font-size: 11px; font-weight: 600; color: var(--text2);
+  display: block;
+}
+
+input[type="text"], textarea, select {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+  width: 100%;
+}
+input[type="text"]:focus, textarea:focus, select:focus { border-color: var(--accent); }
+textarea { resize: vertical; min-height: 50px; }
+select { cursor: pointer; }
+
+input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+.range-row { display: flex; align-items: center; gap: 8px; }
+.range-val { font-size: 12px; color: var(--text2); min-width: 28px; text-align: right; }
+
+input[type="color"] {
+  width: 34px; height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px; background: none; cursor: pointer; padding: 2px;
+}
+.color-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.color-dot {
+  width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+  border: 2px solid transparent; transition: border-color 0.15s, transform 0.1s; flex-shrink: 0;
+}
+.color-dot:hover, .color-dot.active { border-color: white; transform: scale(1.15); }
+
+.btn {
+  padding: 9px 14px; border-radius: 8px;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer; border: none;
+  transition: opacity 0.15s; text-align: center; white-space: nowrap;
+}
+.btn:hover { opacity: 0.82; }
+.btn-primary { background: var(--accent); color: white; }
+.btn-green   { background: #30d158; color: #000; }
+.btn-ghost   { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+.btn-danger  { background: #3a1515; color: #ff6b6b; border: 1px solid #5a2020; font-size: 12px; padding: 5px 10px; }
+.btn-sm      { padding: 5px 10px; font-size: 12px; }
+
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.toggle-label { font-size: 12px; color: var(--text2); }
+.toggle { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; inset: 0; background: var(--border);
+  border-radius: 22px; cursor: pointer; transition: background 0.2s;
+}
+.toggle-slider:before {
+  content: ''; position: absolute;
+  width: 16px; height: 16px; left: 3px; top: 3px;
+  background: white; border-radius: 50%; transition: transform 0.2s;
+}
+.toggle input:checked + .toggle-slider { background: var(--accent); }
+.toggle input:checked + .toggle-slider:before { transform: translateX(16px); }
+
+.drop-zone {
+  border: 2px dashed var(--border); border-radius: 10px;
+  padding: 18px; text-align: center; cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  font-size: 13px; color: var(--text3); line-height: 1.5;
+}
+.drop-zone:hover, .drop-zone.drag-over {
+  border-color: var(--accent); background: rgba(10,132,255,0.06); color: var(--text2);
+}
+.drop-zone input { display: none; }
+
+/* ── Main ── */
+.main {
+  flex: 1; padding: 28px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 24px;
+}
+.main-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.main-header h2 { font-size: 18px; font-weight: 600; color: var(--text2); }
+
+.screenshots-grid {
+  display: flex; flex-wrap: wrap; gap: 36px; align-items: flex-start;
+}
+
+/* ── Screenshot Card ── */
+.ss-card {
+  display: flex; flex-direction: column; gap: 0;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 18px; overflow: hidden;
+  width: 310px;
+}
+.ss-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+}
+.ss-card-num { font-size: 12px; color: var(--text3); font-weight: 600; }
+
+.ss-preview-area {
+  padding: 20px; display: flex; justify-content: center;
+  background: #0a0a0c;
+}
+
+/* per-card text editors */
+.ss-text-editors {
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.ss-text-editors .field-label {
+  font-size: 10px; font-weight: 700; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 3px;
+}
+.ss-text-editors input[type="text"],
+.ss-text-editors textarea {
+  font-size: 12px; padding: 6px 9px;
+}
+.ss-actions {
+  padding: 12px 16px; display: flex; gap: 8px;
+}
+
+/* ── iPhone 17 Frame ── */
+.iphone-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
+.iphone-outer {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The titanium-style frame ring */
+.iphone-frame-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(145deg,
+    #8e8e93 0%, #6e6e73 20%, #aeaeb2 40%,
+    #6e6e73 60%, #8e8e93 80%, #aeaeb2 100%);
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* Cuts the frame ring to show only the border */
+.iphone-frame-inner {
+  position: absolute;
+  z-index: 4;
+  background: #1a1a1e;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.iphone-screen-clip {
+  position: relative;
+  overflow: hidden;
+  z-index: 2;
+  background: #000;
+}
+
+.iphone-screen-clip img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.iphone-screen-placeholder {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255,255,255,0.15); font-size: 11px; text-align: center;
+  background: #111;
+}
+
+/* Dynamic Island */
+.dynamic-island {
+  position: absolute;
+  background: #000;
+  border-radius: 20px;
+  z-index: 10;
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 0 0 1.5px rgba(255,255,255,0.06);
+}
+
+/* ── Framed App Store Preview ── */
+.frame {
+  position: relative;
+  border-radius: 20px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.frame-bg { position: absolute; inset: 0; z-index: 0; }
+.frame-glow { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.frame-content {
+  position: relative; z-index: 2;
+  display: flex; flex-direction: column;
+  align-items: center; width: 100%; height: 100%;
+}
+.frame-text-block {
+  display: flex; flex-direction: column;
+  align-items: center; text-align: center; width: 100%;
+}
+.frame-headline { font-weight: 800; line-height: 1.15; word-break: break-word; }
+.frame-sub { font-weight: 400; line-height: 1.35; word-break: break-word; }
+.frame-badge {
+  font-weight: 700; color: white;
+  background: rgba(255,255,255,0.13);
+  border-radius: 100px; border: 1px solid rgba(255,255,255,0.18);
+  white-space: nowrap; text-align: center;
+}
+
+/* Empty state */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 12px;
+  color: var(--text3); padding: 80px 20px; text-align: center; flex: 1;
+}
+.empty-state svg { opacity: 0.25; }
+.empty-state p { font-size: 14px; }
+</style>
+</head>
+<body>
+
+<!-- ── SIDEBAR ── -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <h1>Screenshot Framer</h1>
+    <p>Simply Swipe · App Store</p>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="section-title">Add Screenshots</div>
+    <label class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept="image/*" multiple />
+      📱 Drop screenshots here<br>or click to browse<br>
+      <span style="font-size:11px;margin-top:4px;display:block">Select multiple at once</span>
+    </label>
+    <button class="btn btn-ghost btn-sm" onclick="clearAll()">Clear all</button>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="section-title">Default Text</div>
+    <p style="font-size:11px;color:var(--text3);line-height:1.5">Applied to all screenshots. Per-screenshot fields below override these. Leave empty to show nothing.</p>
+    <div class="field">
+      <label class="field-label">Headline</label>
+      <input type="text" id="gHeadline" placeholder="e.g. Clean Up Your Camera Roll" oninput="renderAll()">
+    </div>
+    <div class="field">
+      <label class="field-label">Subheadline</label>
+      <textarea id="gSub" placeholder="e.g. Swipe to keep or delete." oninput="renderAll()"></textarea>
+    </div>
+    <div class="field">
+      <label class="field-label">Badge</label>
+      <input type="text" id="gBadge" placeholder="e.g. 100% Private · No uploads" oninput="renderAll()">
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="section-title">Background</div>
+    <div class="field">
+      <label class="field-label">Style</label>
+      <select id="bgStyle" onchange="onBgStyleChange()">
+        <option value="dark">Deep Black</option>
+        <option value="blue">Ocean Blue</option>
+        <option value="purple">Purple Night</option>
+        <option value="green">Forest Green</option>
+        <option value="custom">Custom</option>
+      </select>
+    </div>
+    <div id="customBgField" style="display:none" class="field">
+      <label class="field-label">Custom gradient</label>
+      <div class="color-row">
+        <input type="color" id="customBg1" value="#0a0a0a" oninput="renderAll()">
+        <span style="font-size:11px;color:var(--text3)">→</span>
+        <input type="color" id="customBg2" value="#1a1a2e" oninput="renderAll()">
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="section-title">Accent & Glow</div>
+    <div class="field">
+      <label class="field-label">Color</label>
+      <div class="color-row">
+        <input type="color" id="accentColor" value="#0a84ff" oninput="onAccentChange(this.value)">
+        <div class="color-presets" id="colorPresets"></div>
+      </div>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">Glow behind phone</span>
+      <label class="toggle"><input type="checkbox" id="showGlow" checked onchange="renderAll()"><span class="toggle-slider"></span></label>
+    </div>
+    <div class="field">
+      <label class="field-label">Glow intensity</label>
+      <div class="range-row">
+        <input type="range" id="glowInt" min="0" max="100" value="55" oninput="rng(this,'glowIntV'); renderAll()">
+        <span class="range-val" id="glowIntV">55</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="section-title">Typography</div>
+    <div class="field">
+      <label class="field-label">Font</label>
+      <select id="fontFamily" onchange="renderAll()">
+        <option value="-apple-system,BlinkMacSystemFont,sans-serif">System (SF Pro)</option>
+        <option value="'Inter',sans-serif">Inter</option>
+        <option value="'Poppins',sans-serif">Poppins</option>
+        <option value="'Montserrat',sans-serif">Montserrat</option>
+        <option value="'Nunito',sans-serif">Nunito</option>
+        <option value="'Raleway',sans-serif">Raleway</option>
+        <option value="'DM Sans',sans-serif">DM Sans</option>
+        <option value="'Space Grotesk',sans-serif">Space Grotesk</option>
+        <option value="'Playfair Display',serif">Playfair Display</option>
+      </select>
+    </div>
+    <div class="field">
+      <label class="field-label">Headline size</label>
+      <div class="range-row">
+        <input type="range" id="hlSize" min="50" max="150" value="100" oninput="rng(this,'hlSizeV'); renderAll()">
+        <span class="range-val" id="hlSizeV">100</span>
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">Subtext size</label>
+      <div class="range-row">
+        <input type="range" id="subSize" min="50" max="150" value="100" oninput="rng(this,'subSizeV'); renderAll()">
+        <span class="range-val" id="subSizeV">100</span>
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">Colors</label>
+      <div class="color-row">
+        <input type="color" id="textColor" value="#ffffff" oninput="renderAll()">
+        <span style="font-size:11px;color:var(--text3)">headline</span>
+        <input type="color" id="subColor" value="#aaaaaa" oninput="renderAll()">
+        <span style="font-size:11px;color:var(--text3)">sub</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="section-title">Layout</div>
+    <div class="field">
+      <label class="field-label">Text position</label>
+      <select id="textPos" onchange="renderAll()">
+        <option value="top">Text on top</option>
+        <option value="bottom">Text on bottom</option>
+      </select>
+    </div>
+    <div class="field">
+      <label class="field-label">Screenshot scale</label>
+      <div class="range-row">
+        <input type="range" id="ssScale" min="50" max="95" value="78" oninput="rng(this,'ssScaleV'); renderAll()">
+        <span class="range-val" id="ssScaleV">78</span>
+      </div>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">Show iPhone frame</span>
+      <label class="toggle"><input type="checkbox" id="showFrame" checked onchange="renderAll()"><span class="toggle-slider"></span></label>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="section-title">Export</div>
+    <div class="field">
+      <label class="field-label">Size</label>
+      <select id="exportSize">
+        <option value="6.9">6.9" — 1320×2868</option>
+        <option value="6.5">6.5" — 1242×2688</option>
+        <option value="5.5">5.5" — 1242×2208</option>
+        <option value="all">All three sizes</option>
+      </select>
+    </div>
+    <button class="btn btn-green" onclick="exportAll()">⬇ Export All</button>
+  </div>
+</aside>
+
+<!-- ── MAIN ── -->
+<main class="main">
+  <div class="main-header">
+    <h2 id="mainTitle">No screenshots loaded</h2>
+  </div>
+  <div class="screenshots-grid" id="grid">
+    <div class="empty-state" id="emptyState">
+      <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+        <rect x="5" y="2" width="14" height="20" rx="2.5"/>
+        <line x1="12" y1="18" x2="12" y2="18.5" stroke-linecap="round" stroke-width="2"/>
+      </svg>
+      <p>Add screenshots from the sidebar to get started</p>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── State ──
+const screenshots = [];
+let nextId = 1;
+
+const EXPORT_SIZES = {
+  '6.9': { w:1320, h:2868, label:'6.9in' },
+  '6.5': { w:1242, h:2688, label:'6.5in' },
+  '5.5': { w:1242, h:2208, label:'5.5in' },
+};
+const BACKGROUNDS = {
+  dark:   ['#060608','#111128'],
+  blue:   ['#0a1628','#1a3a5c'],
+  purple: ['#0e0520','#2d1060'],
+  green:  ['#060f09','#0a2e14'],
+};
+const ACCENT_PRESETS = ['#0a84ff','#30d158','#ff3b30','#bf5af2','#ffd60a','#ff9f0a','#fff'];
+
+// ── Init ──
+buildPresets();
+initDrop();
+
+function buildPresets() {
+  const wrap = document.getElementById('colorPresets');
+  ACCENT_PRESETS.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'color-dot' + (c==='#0a84ff'?' active':'');
+    d.style.background = c;
+    d.dataset.color = c;
+    d.onclick = () => {
+      document.getElementById('accentColor').value = c;
+      document.querySelectorAll('.color-dot').forEach(x=>x.classList.remove('active'));
+      d.classList.add('active');
+      renderAll();
+    };
+    wrap.appendChild(d);
+  });
+}
+
+function onAccentChange(v) {
+  document.querySelectorAll('.color-dot').forEach(x=>x.classList.remove('active'));
+  const m = document.querySelector(`.color-dot[data-color="${v}"]`);
+  if(m) m.classList.add('active');
+  renderAll();
+}
+
+function onBgStyleChange() {
+  document.getElementById('customBgField').style.display =
+    document.getElementById('bgStyle').value==='custom' ? 'flex':'none';
+  renderAll();
+}
+
+function rng(el, vid) {
+  document.getElementById(vid).textContent = el.value;
+}
+
+// ── Drop zone ──
+function initDrop() {
+  const zone = document.getElementById('dropZone');
+  const input = document.getElementById('fileInput');
+  input.onchange = e => loadFiles(e.target.files);
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('drag-over');
+    loadFiles(e.dataTransfer.files);
+  });
+}
+
+function loadFiles(files) {
+  Array.from(files).forEach(file => {
+    if(!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      screenshots.push({ id:nextId++, dataURL:ev.target.result,
+        filename:file.name.replace(/\.[^.]+$/,''),
+        headline:'', sub:'', badge:'' });
+      renderAll();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function clearAll() { screenshots.length=0; nextId=1; renderAll(); }
+
+// ── Read globals ──
+function G() {
+  return {
+    headline:  document.getElementById('gHeadline').value,
+    sub:       document.getElementById('gSub').value,
+    badge:     document.getElementById('gBadge').value,
+    bgStyle:   document.getElementById('bgStyle').value,
+    bg1:       document.getElementById('customBg1').value,
+    bg2:       document.getElementById('customBg2').value,
+    accent:    document.getElementById('accentColor').value,
+    showGlow:  document.getElementById('showGlow').checked,
+    glowInt:   parseInt(document.getElementById('glowInt').value)/100,
+    hlSize:    parseInt(document.getElementById('hlSize').value)/100,
+    subSize:   parseInt(document.getElementById('subSize').value)/100,
+    textColor: document.getElementById('textColor').value,
+    subColor:  document.getElementById('subColor').value,
+    textPos:   document.getElementById('textPos').value,
+    ssScale:   parseInt(document.getElementById('ssScale').value)/100,
+    showFrame: document.getElementById('showFrame').checked,
+    font:      document.getElementById('fontFamily').value,
+  };
+}
+
+// ── Render all ──
+const CARD_W = 278; // preview frame width
+
+function renderAll() {
+  const grid = document.getElementById('grid');
+  const empty = document.getElementById('emptyState');
+  document.getElementById('mainTitle').textContent =
+    screenshots.length ? `${screenshots.length} Screenshot${screenshots.length>1?'s':''}` : 'No screenshots loaded';
+
+  Array.from(grid.querySelectorAll('.ss-card')).forEach(c=>c.remove());
+
+  if(!screenshots.length) { empty.style.display='flex'; return; }
+  empty.style.display='none';
+
+  const g = G();
+  screenshots.forEach((ss,i) => grid.appendChild(buildCard(ss,i,g)));
+}
+
+function buildCard(ss, idx, g) {
+  const card = document.createElement('div');
+  card.className = 'ss-card';
+  card.id = `card-${ss.id}`;
+
+  // Header
+  const hdr = document.createElement('div');
+  hdr.className = 'ss-card-header';
+  hdr.innerHTML = `<span class="ss-card-num">Screenshot ${idx+1} <span style="color:var(--text3);font-weight:400">· ${ss.filename}</span></span>`;
+  const del = document.createElement('button');
+  del.className = 'btn btn-danger';
+  del.textContent = '✕';
+  del.title = 'Remove';
+  del.onclick = () => { screenshots.splice(screenshots.findIndex(x=>x.id===ss.id),1); renderAll(); };
+  hdr.appendChild(del);
+  card.appendChild(hdr);
+
+  // Preview
+  const previewArea = document.createElement('div');
+  previewArea.className = 'ss-preview-area';
+  previewArea.id = `preview-${ss.id}`;
+  previewArea.appendChild(buildFrame(ss, g, CARD_W));
+  card.appendChild(previewArea);
+
+  // ── Per-screenshot text editors ──
+  const editors = document.createElement('div');
+  editors.className = 'ss-text-editors';
+
+  const makeInput = (label, val, placeholder, multiline, onChange) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'field';
+    const lbl = document.createElement('label');
+    lbl.className = 'field-label';
+    lbl.textContent = label;
+    const el = document.createElement(multiline ? 'textarea' : 'input');
+    if(!multiline) el.type = 'text';
+    el.value = val;
+    el.placeholder = placeholder;
+    el.oninput = () => { onChange(el.value); refreshPreview(ss); };
+    wrap.appendChild(lbl);
+    wrap.appendChild(el);
+    return wrap;
+  };
+
+  editors.appendChild(makeInput('Headline', ss.headline,
+    g.headline ? `Default: "${g.headline}"` : 'Leave empty for none', false, v => ss.headline = v));
+  editors.appendChild(makeInput('Subheadline', ss.sub,
+    g.sub ? `Default: "${g.sub}"` : 'Leave empty for none', true, v => ss.sub = v));
+  editors.appendChild(makeInput('Badge', ss.badge,
+    g.badge ? `Default: "${g.badge}"` : 'Leave empty for none', false, v => ss.badge = v));
+
+  card.appendChild(editors);
+
+  // Actions
+  const actions = document.createElement('div');
+  actions.className = 'ss-actions';
+  const expBtn = document.createElement('button');
+  expBtn.className = 'btn btn-primary';
+  expBtn.style.cssText = 'flex:1;font-size:12px;padding:7px;';
+  expBtn.textContent = '⬇ Export this screenshot';
+  expBtn.onclick = () => exportOne(ss, G());
+  actions.appendChild(expBtn);
+  card.appendChild(actions);
+
+  return card;
+}
+
+function refreshPreview(ss) {
+  const g = G();
+  const area = document.getElementById(`preview-${ss.id}`);
+  if(!area) return;
+  area.innerHTML = '';
+  area.appendChild(buildFrame(ss, g, CARD_W));
+}
+
+// ── Build preview frame ──
+function buildFrame(ss, g, previewW) {
+  const ratio = 2868/1320;
+  const W = previewW;
+  const H = Math.round(W * ratio);
+
+  const headline = ss.headline || g.headline;
+  const sub      = ss.sub      || g.sub;
+  const badge    = ss.badge    || g.badge;
+
+  const frame = document.createElement('div');
+  frame.className = 'frame';
+  frame.style.cssText = `width:${W}px;height:${H}px;`;
+
+  // BG
+  const bgDiv = document.createElement('div');
+  bgDiv.className = 'frame-bg';
+  const bgColors = g.bgStyle==='custom' ? [g.bg1,g.bg2] : BACKGROUNDS[g.bgStyle];
+  bgDiv.style.background = `linear-gradient(165deg,${bgColors[0]},${bgColors[1]})`;
+  frame.appendChild(bgDiv);
+
+  // Glow
+  if(g.showGlow) {
+    const gd = document.createElement('div');
+    gd.className = 'frame-glow';
+    const gy = g.textPos==='top' ? '20%' : '80%';
+    const a = Math.round(g.glowInt*75).toString(16).padStart(2,'0');
+    gd.style.background = `radial-gradient(ellipse 85% 45% at 50% ${gy}, ${g.accent}${a} 0%, transparent 70%)`;
+    frame.appendChild(gd);
+  }
+
+  // Content
+  const content = document.createElement('div');
+  content.className = 'frame-content';
+  const pv = H*0.045, ph = W*0.07;
+  content.style.cssText = `padding:${pv}px ${ph}px;flex-direction:${g.textPos==='top'?'column':'column-reverse'};justify-content:space-between;`;
+
+  // Text block
+  const tb = document.createElement('div');
+  tb.className = 'frame-text-block';
+  tb.style.gap = `${H*0.008}px`;
+
+  if(headline) {
+    const hl = document.createElement('div');
+    hl.className = 'frame-headline';
+    hl.style.cssText = `font-size:${W*0.08*g.hlSize}px;color:${g.textColor};font-family:${g.font};`;
+    hl.textContent = headline;
+    tb.appendChild(hl);
+  }
+
+  if(sub) {
+    const subEl = document.createElement('div');
+    subEl.className = 'frame-sub';
+    subEl.style.cssText = `font-size:${W*0.044*g.subSize}px;margin-top:${headline?H*0.005:0}px;color:${g.subColor};font-family:${g.font};`;
+    subEl.textContent = sub;
+    tb.appendChild(subEl);
+  }
+
+  // Phone
+  const phoneW = W * g.ssScale;
+  const phoneWrap = document.createElement('div');
+  phoneWrap.style.cssText = `display:flex;align-items:center;justify-content:center;flex:1;padding:${H*0.015}px 0;`;
+
+  if(g.showFrame) {
+    phoneWrap.appendChild(buildIphoneFrame(ss.dataURL, phoneW));
+  } else {
+    // Simple rounded rect, no frame
+    const ph = document.createElement('div');
+    ph.style.cssText = `width:${phoneW}px;border-radius:${phoneW*0.05}px;overflow:hidden;
+      box-shadow:0 20px 60px rgba(0,0,0,0.7);background:#000;`;
+    if(ss.dataURL) {
+      const img = document.createElement('img');
+      img.src = ss.dataURL; img.style.cssText='display:block;width:100%;height:auto;';
+      ph.appendChild(img);
+    }
+    phoneWrap.appendChild(ph);
+  }
+
+  // Badge
+  const badgeWrap = document.createElement('div');
+  badgeWrap.style.cssText='display:flex;justify-content:center;';
+  if(badge) {
+    const b = document.createElement('div');
+    b.className = 'frame-badge';
+    b.style.cssText=`font-size:${W*0.034}px;padding:${H*0.006}px ${W*0.05}px;`;
+    b.textContent = badge;
+    badgeWrap.appendChild(b);
+  }
+
+  if(g.textPos==='top') {
+    content.appendChild(tb);
+    content.appendChild(phoneWrap);
+    content.appendChild(badgeWrap);
+  } else {
+    content.appendChild(badgeWrap);
+    content.appendChild(phoneWrap);
+    content.appendChild(tb);
+  }
+  frame.appendChild(content);
+  return frame;
+}
+
+// ── iPhone 17 frame builder ──
+function buildIphoneFrame(dataURL, screenW) {
+  // Thin clean frame — no side buttons
+  const FRAME   = Math.round(screenW * 0.016); // ultra-thin titanium ring
+  const BEZEL   = Math.round(screenW * 0.028); // inner black bezel
+  const CORNER  = Math.round(screenW * 0.118); // screen corner radius
+  const OUTER_R = CORNER + BEZEL + FRAME;
+  const totalW  = screenW + (BEZEL + FRAME) * 2;
+
+  const screenH = Math.round(screenW * 2.174);
+  const totalH  = screenH + (BEZEL + FRAME) * 2;
+
+  // Dynamic Island
+  const diW   = Math.round(screenW * 0.27);
+  const diH   = Math.round(screenW * 0.068);
+  const diTop = Math.round(screenW * 0.026);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'iphone-wrap';
+  wrap.style.cssText = `width:${totalW}px;height:${totalH}px;position:relative;display:inline-block;`;
+
+  // Outer body — titanium shimmer
+  const outer = document.createElement('div');
+  outer.style.cssText = `
+    width:${totalW}px; height:${totalH}px;
+    border-radius:${OUTER_R}px;
+    background: linear-gradient(145deg,
+      #ffffff 0%, #d8d8d8 20%, #ffffff 45%,
+      #e0e0e0 65%, #ffffff 80%, #f0f0f0 100%);
+    box-shadow:
+      0 0 0 0.5px rgba(0,0,0,0.25),
+      inset 0 1px 0 rgba(255,255,255,0.9),
+      inset 0 -1px 0 rgba(0,0,0,0.08),
+      0 28px 64px rgba(0,0,0,0.8),
+      0 6px 18px rgba(0,0,0,0.4);
+    position: relative;
+  `;
+
+  // Black inner bezel
+  const bezelDiv = document.createElement('div');
+  bezelDiv.style.cssText = `
+    position:absolute; inset:${FRAME}px;
+    border-radius:${CORNER + BEZEL}px;
+    background:#080808;
+  `;
+
+  // Screen area
+  const screen = document.createElement('div');
+  screen.style.cssText = `
+    position:absolute;
+    inset:${FRAME + BEZEL}px;
+    border-radius:${CORNER}px;
+    background:#000;
+    overflow:hidden;
+  `;
+
+  if(dataURL) {
+    const img = document.createElement('img');
+    img.src = dataURL;
+    img.style.cssText = 'display:block;width:100%;height:100%;object-fit:cover;';
+    screen.appendChild(img);
+  } else {
+    const ph = document.createElement('div');
+    ph.className = 'iphone-screen-placeholder';
+    ph.textContent = 'No image';
+    screen.appendChild(ph);
+  }
+
+  // Dynamic Island
+  const di = document.createElement('div');
+  di.style.cssText = `
+    position:absolute;
+    width:${diW}px; height:${diH}px;
+    border-radius:${diH}px;
+    background:#000;
+    top:${FRAME + BEZEL + diTop}px;
+    left:50%; transform:translateX(-50%);
+    z-index:10;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.04);
+  `;
+
+  // Very subtle screen glare
+  const glare = document.createElement('div');
+  glare.style.cssText = `
+    position:absolute;
+    inset:${FRAME + BEZEL}px;
+    border-radius:${CORNER}px;
+    background: linear-gradient(140deg, rgba(255,255,255,0.045) 0%, transparent 40%);
+    pointer-events:none;
+    z-index:6;
+  `;
+
+  outer.appendChild(bezelDiv);
+  outer.appendChild(screen);
+  outer.appendChild(di);
+  outer.appendChild(glare);
+  wrap.appendChild(outer);
+
+  return wrap;
+}
+
+// ── Export ──
+function exportAll() {
+  if(!screenshots.length) { alert('No screenshots loaded!'); return; }
+  const g = G();
+  screenshots.forEach(ss => exportOne(ss, g));
+}
+
+function exportOne(ss, g) {
+  const key = document.getElementById('exportSize').value;
+  if(key==='all') {
+    Object.entries(EXPORT_SIZES).forEach(([k,sz]) => canvasExport(ss,g,sz));
+  } else {
+    canvasExport(ss, g, EXPORT_SIZES[key]);
+  }
+}
+
+function canvasExport(ss, g, sz) {
+  const W=sz.w, H=sz.h;
+  const canvas = document.createElement('canvas');
+  canvas.width=W; canvas.height=H;
+  const ctx = canvas.getContext('2d');
+
+  // BG
+  const bgColors = g.bgStyle==='custom'?[g.bg1,g.bg2]:BACKGROUNDS[g.bgStyle];
+  const grad = ctx.createLinearGradient(0,0,W*0.5,H);
+  grad.addColorStop(0,bgColors[0]); grad.addColorStop(1,bgColors[1]);
+  ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
+
+  // Glow
+  if(g.showGlow) {
+    const gy = g.textPos==='top' ? H*0.2 : H*0.8;
+    const rg = ctx.createRadialGradient(W/2,gy,0,W/2,gy,W*0.72);
+    const a = Math.round(g.glowInt*0.8*255).toString(16).padStart(2,'0');
+    rg.addColorStop(0, g.accent+a); rg.addColorStop(1,'transparent');
+    ctx.fillStyle=rg; ctx.fillRect(0,0,W,H);
+  }
+
+  const headline = ss.headline||g.headline;
+  const sub      = ss.sub||g.sub;
+  const badge    = ss.badge||g.badge;
+
+  // Extract clean font name for FontFace loading
+  const fontMatch = g.font.match(/'([^']+)'/);
+  const fontName = fontMatch ? fontMatch[1] : null;
+
+  const doRender = () => {
+    const img = new Image();
+    img.onload = () => {
+    const phoneW = W * g.ssScale;
+    const phoneH = img.naturalHeight * (phoneW/img.naturalWidth);
+    const hlFS   = Math.round(W*0.08*g.hlSize);
+    const subFS  = Math.round(W*0.044*g.subSize);
+    const pv=H*0.045, ph2=W*0.07;
+
+    // Measure text
+    ctx.font=`800 ${hlFS}px ${g.font}`;
+    const hlLines = headline.split('\n');
+    const hlH = hlFS*1.2*hlLines.length;
+
+    ctx.font=`400 ${subFS}px ${g.font}`;
+    const subLines = sub?sub.split('\n'):[];
+    const subH = sub?(subFS*1.4*subLines.length+H*0.008):0;
+
+    const textH = hlH+subH;
+    const badgeH = badge?H*0.042:0;
+
+    // Calculate positions
+    let textY, phoneY;
+    if(g.textPos==='top') {
+      textY  = pv;
+      phoneY = pv + textH + H*0.025;
+    } else {
+      phoneY = pv + badgeH + H*0.02;
+      textY  = H - pv - textH;
+    }
+
+    // ── Draw phone with iPhone frame ──
+    const BEZEL  = phoneW * 0.028;
+    const FRAME  = phoneW * 0.016;
+    const CORNER = phoneW * 0.118;
+    const totalPW = phoneW + (BEZEL+FRAME)*2;
+    const pH_screen = phoneW * 2.174;
+    const totalPH = pH_screen + (BEZEL+FRAME)*2;
+    const px = (W - totalPW)/2;
+
+    if(g.showFrame) {
+      // Outer frame (titanium gradient)
+      const OUTER_R = CORNER+BEZEL+FRAME;
+      ctx.save();
+      ctx.shadowColor='rgba(0,0,0,0.75)';
+      ctx.shadowBlur=W*0.06; ctx.shadowOffsetY=W*0.025;
+      const fg = ctx.createLinearGradient(px,phoneY,px+totalPW,phoneY+totalPH);
+      fg.addColorStop(0,'#ffffff'); fg.addColorStop(0.20,'#d8d8d8');
+      fg.addColorStop(0.45,'#ffffff'); fg.addColorStop(0.65,'#e0e0e0');
+      fg.addColorStop(0.80,'#ffffff'); fg.addColorStop(1,'#f0f0f0');
+      roundRect(ctx,px,phoneY,totalPW,totalPH,OUTER_R);
+      ctx.fillStyle=fg; ctx.fill();
+      ctx.restore();
+
+      // Inner bezel ring (black)
+      roundRect(ctx,px+FRAME,phoneY+FRAME,totalPW-FRAME*2,totalPH-FRAME*2,CORNER+BEZEL);
+      ctx.fillStyle='#0a0a0c'; ctx.fill();
+
+      // Screen image
+      const sx=px+FRAME+BEZEL, sy=phoneY+FRAME+BEZEL;
+      ctx.save();
+      roundRect(ctx,sx,sy,phoneW,pH_screen,CORNER);
+      ctx.clip();
+      ctx.drawImage(img,sx,sy,phoneW,pH_screen);
+      ctx.restore();
+
+      // Screen glare
+      ctx.save();
+      roundRect(ctx,sx,sy,phoneW,pH_screen,CORNER);
+      ctx.clip();
+      const gl=ctx.createLinearGradient(sx,sy,sx+phoneW*0.7,sy+pH_screen*0.5);
+      gl.addColorStop(0,'rgba(255,255,255,0.06)'); gl.addColorStop(1,'transparent');
+      ctx.fillStyle=gl; ctx.fillRect(sx,sy,phoneW,pH_screen);
+      ctx.restore();
+
+      // Dynamic Island
+      const diW=phoneW*0.29, diH=phoneW*0.075;
+      const dix=sx+(phoneW-diW)/2, diy=sy+phoneW*0.028;
+      ctx.fillStyle='#000';
+      roundRect(ctx,dix,diy,diW,diH,diH/2);
+      ctx.fill();
+
+      // Frame border stroke
+      ctx.save();
+      roundRect(ctx,px,phoneY,totalPW,totalPH,OUTER_R);
+      ctx.strokeStyle='rgba(0,0,0,0.5)'; ctx.lineWidth=1; ctx.stroke();
+      ctx.restore();
+
+    } else {
+      // Simple rounded rect
+      ctx.save();
+      ctx.shadowColor='rgba(0,0,0,0.7)';
+      ctx.shadowBlur=W*0.05; ctx.shadowOffsetY=W*0.02;
+      roundRect(ctx,(W-phoneW)/2,phoneY,phoneW,phoneH,phoneW*0.05);
+      ctx.clip();
+      ctx.drawImage(img,(W-phoneW)/2,phoneY,phoneW,phoneH);
+      ctx.restore();
+    }
+
+    // ── Draw headline ──
+    ctx.textAlign='center';
+    ctx.fillStyle=g.textColor;
+    ctx.font=`800 ${hlFS}px ${g.font}`;
+    let ly=textY+hlFS;
+    hlLines.forEach(line=>{ ctx.fillText(line,W/2,ly); ly+=hlFS*1.2; });
+
+    // ── Draw subtext ──
+    if(sub) {
+      ctx.fillStyle=g.subColor;
+      ctx.font=`400 ${subFS}px ${g.font}`;
+      ly+=H*0.006;
+      subLines.forEach(line=>{ ctx.fillText(line,W/2,ly); ly+=subFS*1.4; });
+    }
+
+    // ── Badge ──
+    if(badge) {
+      ctx.font=`700 ${Math.round(W*0.034)}px ${g.font}`;
+      const bw=ctx.measureText(badge).width+W*0.1;
+      const bh=H*0.038;
+      const bx=(W-bw)/2;
+      const by=g.textPos==='top'?H-pv-bh:pv;
+      ctx.save();
+      ctx.fillStyle='rgba(255,255,255,0.13)';
+      roundRect(ctx,bx,by,bw,bh,bh/2); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle='white'; ctx.textAlign='center';
+      ctx.fillText(badge,W/2,by+bh*0.68);
+    }
+
+      const a=document.createElement('a');
+      a.download=`${ss.filename||'screenshot'}-${sz.label}.png`;
+      a.href=canvas.toDataURL('image/png'); a.click();
+    };
+    img.src=ss.dataURL;
+  }; // end doRender
+
+  // Load the Google Font before drawing so canvas uses it correctly
+  if(fontName && fontName !== 'system') {
+    const weight800 = new FontFace(fontName, `local('${fontName}'), url(https://fonts.gstatic.com/s/${fontName.toLowerCase().replace(/ /g,'')}/v1/regular.woff2)`);
+    // Use document.fonts.ready as a simpler approach — font is already loaded by CSS
+    document.fonts.load(`800 40px '${fontName}'`).then(() => doRender()).catch(() => doRender());
+  } else {
+    doRender();
+  }
+}
+
+function roundRect(ctx,x,y,w,h,r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+
+renderAll();
+</script>
+</body>
+</html>

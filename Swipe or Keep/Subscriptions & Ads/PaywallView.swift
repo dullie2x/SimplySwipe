@@ -74,17 +74,17 @@ struct PaywallView: View {
                     } else {
                         VStack(spacing: 15) {
                             PaywallOption(title: "Unlimited Swipes - Monthly",
-                                          subtitle: "For new customers only",
                                           price: getPriceString(for: .monthly),
-                                          highlight: true,
-                                          showFreeTrial: true,
+                                          highlight: false,
                                           animate: $animate) {
                                 storeManager.purchase(.monthly)
                             }
 
                             PaywallOption(title: "Unlimited Swipes - Yearly",
+                                          subtitle: "3-day free trial for new customers",
                                           price: getPriceString(for: .yearly),
-                                          highlight: false,
+                                          highlight: true,
+                                          showFreeTrial: true,
                                           animate: $animate) {
                                 storeManager.purchase(.yearly)
                             }
@@ -160,8 +160,14 @@ struct PaywallView: View {
         }
         .onAppear {
             animate.toggle()
+            // If already confirmed premium (e.g. from cache), dismiss without
+            // waiting for any async network calls.
+            if storeManager.isPremium {
+                dismiss()
+                return
+            }
             Task {
-                await storeManager.requestProducts() // Ensure product list is loaded
+                await storeManager.requestProducts()
                 await storeManager.checkEntitlements()
                 if storeManager.isPremium {
                     dismiss()

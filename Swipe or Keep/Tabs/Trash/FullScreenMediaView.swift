@@ -14,6 +14,7 @@ struct FullScreenMediaView: View {
     @State private var isLoadingFullRes: [Bool]
     @State private var loadFailed: [Bool]
     @State private var audioSessionConfigured: Bool = false
+    @State private var isLoading: [Bool] // Track which items are currently loading
     
     // Track visible indices for preloading
     @State private var visibleRange: Range<Int>? = nil
@@ -27,6 +28,7 @@ struct FullScreenMediaView: View {
         self._videoPlayers = State(initialValue: [:])
         self._isLoadingFullRes = State(initialValue: Array(repeating: false, count: allAssets.count))
         self._loadFailed = State(initialValue: Array(repeating: false, count: allAssets.count))
+        self._isLoading = State(initialValue: Array(repeating: false, count: allAssets.count))
     }
 
     var body: some View {
@@ -93,6 +95,12 @@ struct FullScreenMediaView: View {
                             player.pause()
                         }
                     }
+                    
+                    // Play the current video if it exists
+                    if let currentPlayer = videoPlayers[newIndex] {
+                        currentPlayer.seek(to: .zero)
+                        currentPlayer.play()
+                    }
                 }
                 
                 // Bottom bar with date
@@ -118,7 +126,9 @@ struct FullScreenMediaView: View {
         }
         .onAppear {
             configureAudioSession()
-            // Preload media when view appears
+            // Immediately load the current item
+            loadCurrentMedia()
+            // Then preload adjacent items
             preloadMediaAroundIndex(currentIndex)
         }
         .onDisappear {
@@ -135,6 +145,21 @@ struct FullScreenMediaView: View {
         }
     }
     
+    // Load the current media item immediately
+    private func loadCurrentMedia() {
+        let asset = allAssets[currentIndex]
+        
+        if asset.mediaType == .video {
+            if videoPlayers[currentIndex] == nil && !loadFailed[currentIndex] {
+                loadVideo(for: currentIndex)
+            }
+        } else {
+            if displayedImages[currentIndex] == nil && !loadFailed[currentIndex] {
+                loadImage(for: currentIndex)
+            }
+        }
+    }
+    
     // Configure audio session for video playback
     private func configureAudioSession() {
         guard !audioSessionConfigured else { return }
@@ -146,18 +171,15 @@ struct FullScreenMediaView: View {
             try audioSession.setCategory(
                 .playback,
                 mode: .moviePlayback,
-                options: [.allowAirPlay, .allowBluetooth, .allowBluetoothA2DP, .duckOthers]
+                options: [.allowAirPlay, .allowBluetoothHFP, .allowBluetoothA2DP, .duckOthers]
             )
             
             // Activate the session with high priority
             try audioSession.setActive(true, options: [])
             audioSessionConfigured = true
-            print("✅ Audio session configured for video playback")
-        } catch {
-            print("❌ Failed to configure audio session: \(error)")
-        }
+        } catch { _ = error }
     }
-    
+
     // Reset audio session when leaving
     private func resetAudioSession() {
         if audioSessionConfigured {
@@ -165,10 +187,7 @@ struct FullScreenMediaView: View {
                 let audioSession = AVAudioSession.sharedInstance()
                 try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
                 audioSessionConfigured = false
-                print("Audio session deactivated")
-            } catch {
-                print("Failed to deactivate audio session: \(error)")
-            }
+            } catch { _ = error }
         }
     }
 
@@ -219,8 +238,11 @@ struct FullScreenMediaView: View {
                 ProgressView()
                     .tint(.white)
                     .scaleEffect(1.5)
-                    .onAppear {
-                        loadImage(for: index)
+                    .task {
+                        // Use task for better lifecycle handling
+                        if displayedImages[index] == nil && !loadFailed[index] {
+                            loadImage(for: index)
+                        }
                     }
             }
         }
@@ -279,7 +301,8 @@ struct FullScreenMediaView: View {
                 ProgressView()
                     .tint(.white)
                     .scaleEffect(1.5)
-                    .onAppear {
+                    .task {
+                        // Use task instead of onAppear for better async handling
                         // Only load if we don't already have a player or it's not already loading
                         if videoPlayers[index] == nil && !loadFailed[index] {
                             loadVideo(for: index)
@@ -312,6 +335,9 @@ struct FullScreenMediaView: View {
 
     // Load image with two-phase loading (medium quality then full res)
     private func loadImage(for index: Int) {
+        // Prevent duplicate loads
+        guard !isLoading[index] else { return }
+        
         let asset = allAssets[index]
         
         // Check if we already have a cached full-res version
@@ -330,6 +356,9 @@ struct FullScreenMediaView: View {
             return
         }
         
+        // Mark as loading
+        isLoading[index] = true
+        
         // Load medium quality first for quick display
         let manager = PHImageManager.default()
         let mediumOptions = PHImageRequestOptions()
@@ -344,14 +373,27 @@ struct FullScreenMediaView: View {
             height: UIScreen.main.bounds.height * UIScreen.main.scale
         )
         
+        // Set a timeout to mark as failed if loading takes too long
+        let timeoutTask = DispatchWorkItem {
+            DispatchQueue.main.async {
+                if self.displayedImages[index] == nil {
+                    self.loadFailed[index] = true
+                    self.isLoading[index] = false
+                }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: timeoutTask)
+        
         manager.requestImage(
             for: asset,
             targetSize: targetSize,
             contentMode: .aspectFit,
             options: mediumOptions
         ) { result, info in
-            let degraded = info?[PHImageResultIsDegradedKey] as? Bool ?? false
+            timeoutTask.cancel() // Cancel timeout if we got a result
             
+            let degraded = info?[PHImageResultIsDegradedKey] as? Bool ?? false
+
             if let result = result {
                 // Cache and display medium quality image
                 ThumbnailCache.shared.setImage(result, for: mediumResKey)
@@ -361,6 +403,7 @@ struct FullScreenMediaView: View {
                     if displayedImages[index] == nil {
                         displayedImages[index] = result
                     }
+                    isLoading[index] = false
                     
                     // If this was just a preview, load full quality
                     if degraded {
@@ -371,6 +414,7 @@ struct FullScreenMediaView: View {
                 // Failed to load image
                 DispatchQueue.main.async {
                     loadFailed[index] = true
+                    isLoading[index] = false
                 }
             }
         }
@@ -427,15 +471,37 @@ struct FullScreenMediaView: View {
         // Check if we already have a player for this index
         guard videoPlayers[index] == nil else { return }
         
+        // Prevent duplicate loads
+        guard !isLoading[index] else { return }
+        
+        // Mark as loading
+        isLoading[index] = true
+        
         let manager = PHImageManager.default()
         let options = PHVideoRequestOptions()
         options.isNetworkAccessAllowed = true
         options.deliveryMode = .automatic
         
+        // Set a timeout for video loading
+        let timeoutTask = DispatchWorkItem {
+            DispatchQueue.main.async {
+                if self.videoPlayers[index] == nil {
+                    self.loadFailed[index] = true
+                    self.isLoading[index] = false
+                }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: timeoutTask)
+        
         manager.requestPlayerItem(forVideo: asset, options: options) { playerItem, info in
+            timeoutTask.cancel() // Cancel timeout
+            
             DispatchQueue.main.async {
                 // Double-check we still don't have a player (avoid race conditions)
-                guard videoPlayers[index] == nil else { return }
+                guard videoPlayers[index] == nil else {
+                    isLoading[index] = false
+                    return
+                }
                 
                 if let playerItem = playerItem {
                     let player = AVPlayer(playerItem: playerItem)
@@ -450,8 +516,16 @@ struct FullScreenMediaView: View {
                     
                     // Store the player
                     videoPlayers[index] = player
+                    isLoading[index] = false
+                    
+                    // Auto-play if this is the current index
+                    if index == currentIndex {
+                        player.seek(to: .zero)
+                        player.play()
+                    }
                 } else {
                     loadFailed[index] = true
+                    isLoading[index] = false
                 }
             }
         }

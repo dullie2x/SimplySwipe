@@ -53,17 +53,14 @@ struct Caption: View {
                         Spacer()
                     }
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 16)
+                    .padding(.bottom, 100) // Increased from 16 to clear the tab bar
                 }
-                
-
                 
                 // —— bottom‑right buttons + swipe icon
                 VStack {
                     Spacer()
                     HStack {
                         Spacer()
-                        // increased spacing between groups
                         VStack(spacing: 24) {
                             // —— Like button + label
                             VStack(spacing: 4) {
@@ -132,7 +129,7 @@ struct Caption: View {
                                 .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
                             }
                         }
-                        .padding(.bottom, 120)
+                        .padding(.bottom, 200) // Increased from 120 to clear the tab bar
                         .padding(.trailing, 20)
                     }
                 }

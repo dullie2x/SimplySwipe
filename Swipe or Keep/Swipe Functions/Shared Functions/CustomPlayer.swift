@@ -9,57 +9,188 @@ struct TikTokVideoPlayerView: View {
     @State private var isPaused = false
     @State private var isReady = false
     @State private var hasError = false
-    @State private var didSetup = false
+    @State private var retryCount = 0
+    @State private var focusDebounceTask: Task<Void, Never>? = nil
+    @State private var isBuffering = false  // NEW: Track buffering state separately
+    private let maxRetries = 3
 
     @StateObject private var playerObserver = VideoPlayerObserver()
+    @StateObject private var bufferingCoordinator = VideoBufferingCoordinator()
 
     // MARK: - Setup / Teardown
 
     private func setupPlayer() {
-        guard !didSetup else { return }
-        didSetup = true
-
+        
+        // CRITICAL: Check if player is already playing before doing anything else
+        // This handles the case where the player is reused from cache
+        if player.timeControlStatus == .playing || player.rate > 0 {
+            isReady = true
+            hasError = false
+            isBuffering = false
+            applyVolumeFromPreference()
+            // Still observe for future changes
+        }
+        
         playerObserver.startObserving(
             player: player,
             onItemChange: {
-                // New item: reset and recheck readiness
-                self.isReady = false
-                self.hasError = false
-                self.checkPlayerReadiness()
+                // Reset state for new item
+                Task { @MainActor in
+                    self.isReady = false
+                    self.hasError = false
+                    self.retryCount = 0
+                    self.isBuffering = false
+                    self.checkPlayerReadiness()
+                }
             },
             onStatusChange: { status in
-                switch status {
-                case .readyToPlay:
-                    self.isReady = true
-                    self.hasError = false
-                    self.updatePlaybackState()
-                case .failed:
-                    if let err = self.player.currentItem?.error {
-                        print("❌ Player item failed: \(err.localizedDescription)")
+                Task { @MainActor in
+                    self.handleStatusChange(status)
+                }
+            },
+            onPlaybackStart: {
+                // Called when player actually starts playing
+                Task { @MainActor in
+                    if !self.isReady {
+                        self.isReady = true
+                        self.hasError = false
+                        self.isBuffering = false
+                        self.applyVolumeFromPreference()
                     }
-                    self.hasError = true
-                    self.isReady = false
-                case .unknown:
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        self.checkPlayerReadiness()
-                    }
-                @unknown default:
-                    self.hasError = true
                 }
             }
         )
+        
+        // Start monitoring buffering state
+        startBufferingObservation()
 
         checkPlayerReadiness()
     }
 
     private func cleanupPlayer() {
+        focusDebounceTask?.cancel()
+        focusDebounceTask = nil
         playerObserver.stopObserving()
-        player.volume = 0.0
+        stopBufferingObservation()
         player.pause()
-        didSetup = false
+    }
+    
+    // MARK: - Buffering Detection
+
+    private func startBufferingObservation() {
+        bufferingCoordinator.startObserving(player: player)
+    }
+    
+    private func stopBufferingObservation() {
+        bufferingCoordinator.stopObserving()
     }
 
     // MARK: - Status / Playback
+
+    private func handleStatusChange(_ status: AVPlayerItem.Status) {
+        
+        switch status {
+        case .readyToPlay:
+            isReady = true
+            hasError = false
+            retryCount = 0
+            applyVolumeFromPreference()
+            updatePlaybackState()
+            
+        case .failed:
+            // IMPORTANT: Check if player is actually playing before showing error
+            // Sometimes video track fails but audio keeps playing
+            if player.timeControlStatus == .playing || player.rate > 0 {
+                isReady = true
+                hasError = false
+                applyVolumeFromPreference()
+                return
+            }
+            
+            if let item = player.currentItem, let error = item.error {
+                let nsError = error as NSError
+                
+                // Ignore recoverable decoder errors (-12785 = kVTVideoDecoderMalfunctionErr)
+                // These happen during rapid swiping and resolve on retry
+                let isDecoderError = nsError.code == -12785
+                let isNetworkError = nsError.domain == NSURLErrorDomain
+                let isMediaServicesReset = nsError.code == AVError.Code.mediaServicesWereReset.rawValue
+                
+                let isRecoverable = isDecoderError || isNetworkError || isMediaServicesReset
+                
+                if isDecoderError {
+                }
+                
+                if isRecoverable && retryCount < maxRetries {
+                    retryCount += 1
+                    
+                    // Keep showing loading state, not error
+                    isReady = false
+                    hasError = false
+                    
+                    // Shorter delay for decoder errors since they resolve quickly
+                    let delay = isDecoderError ? 0.3 : 1.0
+                    
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                        self.checkPlayerReadiness()
+                    }
+                } else if !isRecoverable {
+                    // Non-recoverable error - show immediately
+                    hasError = true
+                    isReady = false
+                } else {
+                    // Max retries reached
+                    hasError = true
+                    isReady = false
+                }
+            } else {
+                // Unknown failure - give it one more chance
+                if retryCount < maxRetries {
+                    retryCount += 1
+                    
+                    isReady = false
+                    hasError = false
+                    
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        self.checkPlayerReadiness()
+                    }
+                } else {
+                    hasError = true
+                    isReady = false
+                }
+            }
+            
+        case .unknown:
+            // Check if player is actually playing despite unknown status
+            if player.timeControlStatus == .playing || player.rate > 0 {
+                isReady = true
+                hasError = false
+                applyVolumeFromPreference()
+                return
+            }
+            
+            // Don't show error for unknown state - just keep loading
+            isReady = false
+            hasError = false
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                self.checkPlayerReadiness()
+            }
+            
+        @unknown default:
+            // Don't immediately error - give it a chance
+            if retryCount < 1 {
+                retryCount += 1
+                isReady = false
+                hasError = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.checkPlayerReadiness()
+                }
+            } else {
+                hasError = true
+            }
+        }
+    }
 
     private func checkPlayerReadiness() {
         guard let currentItem = player.currentItem else {
@@ -67,38 +198,39 @@ struct TikTokVideoPlayerView: View {
             return
         }
 
-        switch currentItem.status {
-        case .readyToPlay:
+        // Check if player is actually playing (audio works even if video fails)
+        if player.timeControlStatus == .playing || player.rate > 0 {
             isReady = true
             hasError = false
-            updatePlaybackState()
-        case .failed:
-            if let err = currentItem.error {
-                print("❌ Player item failed: \(err.localizedDescription)")
-            }
-            hasError = true
-        case .unknown:
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                self.checkPlayerReadiness()
-            }
-        @unknown default:
-            hasError = true
+            return
         }
+
+        handleStatusChange(currentItem.status)
+    }
+
+    private func applyVolumeFromPreference() {
+        let shouldMute = VideoMutePreference.shared.isMuted
+        player.volume = shouldMute ? 0.0 : 1.0
     }
 
     private func updatePlaybackState() {
-        guard isReady else { return }
+        guard isReady else {
+            return
+        }
 
         if isFocused && !isPaused {
             if isAtOrPastEnd() {
                 seekToStartThenPlay()
             } else {
-                player.volume = 0.0  // start muted
+                applyVolumeFromPreference()
                 player.play()
             }
         } else {
-            player.volume = 0.0
-            if isPaused { player.pause() }
+            if isPaused {
+                player.pause()
+            } else {
+                player.pause()
+            }
         }
     }
 
@@ -111,9 +243,9 @@ struct TikTokVideoPlayerView: View {
     }
 
     private func seekToStartThenPlay() {
-        player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
-            if !self.isPaused && self.isFocused {
-                self.player.volume = 0.0
+        player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero) { finished in
+            if finished && !self.isPaused && self.isFocused {
+                self.applyVolumeFromPreference()
                 self.player.play()
             }
         }
@@ -122,11 +254,30 @@ struct TikTokVideoPlayerView: View {
     // MARK: - Focus & Interaction
 
     private func handleFocusChange(_ focused: Bool) {
-        updatePlaybackState()
+        // Cancel any pending focus change
+        focusDebounceTask?.cancel()
+        
+        // Debounce focus changes to prevent decoder errors during rapid swiping
+        focusDebounceTask = Task {
+            // Small delay to let the player settle
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            
+            guard !Task.isCancelled else { return }
+            
+            await MainActor.run {
+                if focused {
+                    applyVolumeFromPreference()
+                }
+                updatePlaybackState()
+            }
+        }
     }
 
     private func togglePlayback() {
-        guard isFocused else { return }
+        guard isFocused else {
+            return
+        }
+        
         isPaused.toggle()
 
         if isPaused {
@@ -135,7 +286,7 @@ struct TikTokVideoPlayerView: View {
             if isAtOrPastEnd() {
                 seekToStartThenPlay()
             } else {
-                player.volume = 0.0
+                applyVolumeFromPreference()
                 player.play()
             }
         }
@@ -149,41 +300,75 @@ struct TikTokVideoPlayerView: View {
             // Video layer (full asset: no crop)
             SimpleVideoPlayerLayer(player: player)
                 .opacity(isReady ? 1 : 0)
-                .animation(.easeInOut(duration: 0.25), value: isReady)
+                .animation(.easeInOut(duration: 0.3), value: isReady)
                 .onTapGesture { togglePlayback() }
-                .onAppear { setupPlayer() }
-                .onDisappear { cleanupPlayer() }
-
-            // Loading overlay → bouncing logo
-            if !isReady && !hasError {
-                VStack(spacing: 12) {
-                    BouncingLogo(size: 80, amplitude: 10, period: 0.9)
+                .onAppear {
+                    setupPlayer()
                 }
-                .padding(.top, 8)
+                .onDisappear {
+                    cleanupPlayer()
+                }
+
+            // Minimal buffering indicator (only when buffering, not initial load)
+            if isReady && bufferingCoordinator.isBuffering && !hasError && isFocused {
+                MinimalLoadingOverlay(
+                    isLoading: true,
+                    isSlow: false,
+                    message: nil
+                )
             }
 
-            // Error overlay
+            // Error overlay (only after genuine failures)
             if hasError {
-                VStack {
-                    Spacer()
-                    VStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.title)
-                            .foregroundColor(.yellow)
-                        Text("Video Error")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        Button("Retry") {
-                            hasError = false
-                            isReady = false
-                            setupPlayer()
+                ZStack {
+                    Color.black.opacity(0.7)
+                    
+                    VStack {
+                        Spacer()
+                        VStack(spacing: 16) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 44))
+                                .foregroundColor(.yellow)
+                            
+                            VStack(spacing: 6) {
+                                Text("Unable to Load Video")
+                                    .font(.custom(AppFont.regular, size: 18))
+                                    .foregroundColor(.white)
+                                
+                                Text("The video couldn't be loaded after \(maxRetries) attempts")
+                                    .font(.custom(AppFont.regular, size: 14))
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 20)
+                            }
+                            
+                            Button(action: {
+                                hasError = false
+                                isReady = false
+                                retryCount = 0
+                                setupPlayer()
+                            }) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "arrow.clockwise")
+                                        .font(.system(size: 14, weight: .semibold))
+                                    Text("Try Again")
+                                        .font(.custom(AppFont.regular, size: 16))
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 12)
+                                .background(Color.blue)
+                                .cornerRadius(12)
+                            }
                         }
-                        .foregroundColor(.blue)
+                        .padding(24)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(Color.black.opacity(0.9))
+                        )
+                        .padding(.horizontal, 40)
+                        Spacer()
                     }
-                    .padding()
-                    .background(Color.black.opacity(0.7))
-                    .cornerRadius(12)
-                    Spacer()
                 }
             }
 
@@ -202,8 +387,8 @@ struct TikTokVideoPlayerView: View {
                 .transition(.scale.combined(with: .opacity))
             }
         }
-        .onChange(of: isFocused) {
-            handleFocusChange(isFocused)
+        .onChange(of: isFocused) { _, newValue in
+            handleFocusChange(newValue)
         }
     }
 }
@@ -215,18 +400,25 @@ final class VideoPlayerObserver: ObservableObject {
     private var observingPlayer: AVQueuePlayer?
     private var itemStatusObserver: NSKeyValueObservation?
     private var currentItemObserver: NSKeyValueObservation?
+    private var rateObserver: NSKeyValueObservation?
+    private var onPlaybackStartCallback: (() -> Void)?
+    private var hasNotifiedPlaybackStart = false
 
     func startObserving(
         player: AVQueuePlayer,
         onItemChange: @escaping () -> Void,
-        onStatusChange: @escaping (AVPlayerItem.Status) -> Void
+        onStatusChange: @escaping (AVPlayerItem.Status) -> Void,
+        onPlaybackStart: @escaping () -> Void = {}
     ) {
         stopObserving()
         observingPlayer = player
+        onPlaybackStartCallback = onPlaybackStart
+        hasNotifiedPlaybackStart = false
 
         // Observe currentItem changes and reattach status observer
-        currentItemObserver = player.observe(\.currentItem, options: [.new]) { [weak self] _, change in
+        currentItemObserver = player.observe(\.currentItem, options: [.new]) { [weak self] _, _ in
             DispatchQueue.main.async {
+                self?.hasNotifiedPlaybackStart = false
                 onItemChange()
 
                 // Reattach to the new item's status
@@ -246,6 +438,16 @@ final class VideoPlayerObserver: ObservableObject {
                 DispatchQueue.main.async { onStatusChange(item.status) }
             }
         }
+        
+        // Observe rate changes to detect when playback actually starts
+        rateObserver = player.observe(\.rate, options: [.new]) { [weak self] player, _ in
+            DispatchQueue.main.async {
+                if player.rate > 0 && !(self?.hasNotifiedPlaybackStart ?? true) {
+                    self?.hasNotifiedPlaybackStart = true
+                    self?.onPlaybackStartCallback?()
+                }
+            }
+        }
 
         // Keep a benign time observer (ensures periodic main-thread activity)
         timeObserver = player.addPeriodicTimeObserver(
@@ -263,10 +465,68 @@ final class VideoPlayerObserver: ObservableObject {
         itemStatusObserver = nil
         currentItemObserver?.invalidate()
         currentItemObserver = nil
+        rateObserver?.invalidate()
+        rateObserver = nil
         observingPlayer = nil
+        onPlaybackStartCallback = nil
+        hasNotifiedPlaybackStart = false
     }
 
     deinit { stopObserving() }
+}
+
+// MARK: - Buffering Coordinator
+
+@MainActor
+final class VideoBufferingCoordinator: ObservableObject {
+    @Published var isBuffering = false
+
+    private var bufferingObserver: NSKeyValueObservation?
+    private var timeControlObserver: NSKeyValueObservation?
+
+    func startObserving(player: AVQueuePlayer) {
+        stopObserving()
+
+        bufferingObserver = player.currentItem?.observe(\.isPlaybackBufferEmpty, options: [.new]) { [weak self] item, _ in
+            Task { @MainActor in
+                let bufferEmpty = item.isPlaybackBufferEmpty
+                let likelyToKeepUp = item.isPlaybackLikelyToKeepUp
+                if bufferEmpty && !likelyToKeepUp {
+                    self?.isBuffering = true
+                } else if likelyToKeepUp {
+                    self?.isBuffering = false
+                }
+            }
+        }
+
+        timeControlObserver = player.observe(\.timeControlStatus, options: [.new]) { [weak self] player, _ in
+            Task { @MainActor in
+                switch player.timeControlStatus {
+                case .waitingToPlayAtSpecifiedRate:
+                    self?.isBuffering = true
+                case .playing:
+                    self?.isBuffering = false
+                case .paused:
+                    break
+                @unknown default:
+                    break
+                }
+            }
+        }
+    }
+
+    func stopObserving() {
+        bufferingObserver?.invalidate()
+        bufferingObserver = nil
+        timeControlObserver?.invalidate()
+        timeControlObserver = nil
+    }
+
+    deinit { 
+        // Access properties directly in deinit since it's synchronous
+        bufferingObserver?.invalidate()
+        timeControlObserver?.invalidate()
+    }
 }
 
 // MARK: - SIMPLE AVPlayerLayer Host
@@ -323,23 +583,3 @@ class PlayerUIView: UIView {
     }
 }
 
-// MARK: - Bouncing Logo (time-driven, resilient)
-
-private struct BouncingLogo: View {
-    var size: CGFloat = 100
-    var amplitude: CGFloat = 10       // vertical travel (pts)
-    var period: Double = 0.9          // seconds per full cycle
-
-    var body: some View {
-        TimelineView(.animation) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            let y = sin((2 * .pi / period) * t) * amplitude
-
-            Image("orca8")
-                .resizable()
-                .scaledToFit()
-                .frame(width: size, height: size)
-                .offset(y: y)
-        }
-    }
-}

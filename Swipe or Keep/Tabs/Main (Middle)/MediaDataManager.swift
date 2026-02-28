@@ -24,36 +24,48 @@ class MediaDataManager: ObservableObject {
     
     // MARK: - Main Loading Function (called from splash screen)
     func loadAllData() async {
-        print("📱 Starting to load all media data...")
-        
-        // Load data in parallel for better performance
+        // Request authorization FIRST — on first launch fetchYears() and
+        // loadSectionPreviewImages() would otherwise race ahead with no permission
+        // and return empty results before the user taps Allow.
+        let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        guard status == .authorized || status == .limited else {
+            isDataLoaded = true
+            return
+        }
+
+        // Now all three tasks can safely access the photo library in parallel
         await withTaskGroup(of: Void.self) { group in
+            // Essential: Category preview images (just 3 categories × 4 images = 12 images)
+            group.addTask {
+                await self.loadSectionPreviewImages()
+            }
+
+            // Essential: List of years and folders (fast metadata only, no images)
             group.addTask {
                 await self.fetchYears()
             }
             group.addTask {
                 await self.fetchFolders()
             }
-            group.addTask {
-                await self.loadSectionPreviewImages()
-            }
         }
-        
-        // Now load preview images (these depend on years/folders being loaded)
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask {
-                await self.loadYearPreviewImages()
-            }
-            group.addTask {
-                await self.loadAlbumPreviewImages()
-            }
-            group.addTask {
-                await self.startProgressCalculation()
-            }
-        }
-        
+
         isDataLoaded = true
-        print("✅ All media data loaded successfully!")
+        
+        // BACKGROUND: Load remaining data after app is shown
+        Task.detached(priority: .utility) {
+            await withTaskGroup(of: Void.self) { group in
+                // Load year and album preview images in background
+                group.addTask {
+                    await self.loadYearPreviewImages()
+                }
+                group.addTask {
+                    await self.loadAlbumPreviewImages()
+                }
+                group.addTask {
+                    await self.startProgressCalculation()
+                }
+            }
+        }
     }
     
     // MARK: - Data Loading Functions (moved from NavStackedBlocksView)
@@ -131,13 +143,11 @@ class MediaDataManager: ObservableObject {
         // Store year data for display
         self.yearsList = sortedYears.map { $0.yearString }
         
-        print("📅 Loaded \(yearsList.count) years and \(monthYearsList.count) month-years")
     }
     
     private func fetchFolders() async {
         let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
         guard status == .authorized else {
-            print("Photo access denied")
             return
         }
 
@@ -155,7 +165,6 @@ class MediaDataManager: ObservableObject {
         }
 
         self.folders = tempFolders
-        print("📁 Loaded \(folders.count) albums")
     }
     
     private func loadSectionPreviewImages() async {
@@ -214,8 +223,6 @@ class MediaDataManager: ObservableObject {
             
             self.sectionPreviewImages[index] = images
         }
-        
-        print("🖼️ Loaded section preview images")
     }
     
     private func loadYearPreviewImages() async {
@@ -224,34 +231,46 @@ class MediaDataManager: ObservableObject {
         requestOptions.isSynchronous = false
         requestOptions.deliveryMode = .highQualityFormat
         requestOptions.resizeMode = .fast
-        
+
+        let calendar = Calendar.current
+
         for year in yearsList {
-            // Get ALL assets, then filter by year
+            guard let yearInt = Int(year) else { continue }
+
+            // Build a date-ranged predicate instead of scanning the full library
+            var startComponents = DateComponents()
+            startComponents.year = yearInt
+            startComponents.month = 1
+            startComponents.day = 1
+            startComponents.hour = 0
+            startComponents.minute = 0
+            startComponents.second = 0
+
+            var endComponents = DateComponents()
+            endComponents.year = yearInt + 1
+            endComponents.month = 1
+            endComponents.day = 1
+            endComponents.hour = 0
+            endComponents.minute = 0
+            endComponents.second = 0
+
+            guard let startDate = calendar.date(from: startComponents),
+                  let endDate   = calendar.date(from: endComponents) else { continue }
+
             let fetchOptions = PHFetchOptions()
             fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-            
-            let allAssets = PHAsset.fetchAssets(with: fetchOptions)
+            fetchOptions.fetchLimit = 4
+            fetchOptions.predicate = NSPredicate(
+                format: "creationDate >= %@ AND creationDate < %@",
+                startDate as NSDate,
+                endDate   as NSDate
+            )
+
+            let assets = PHAsset.fetchAssets(with: fetchOptions)
             var images: [UIImage] = []
-            let calendar = Calendar.current
-            
-            // Find assets that match this specific year
-            var matchingAssets: [PHAsset] = []
-            
-            for i in 0..<allAssets.count {
-                let asset = allAssets.object(at: i)
-                if let creationDate = asset.creationDate {
-                    let assetYear = calendar.component(.year, from: creationDate)
-                    if String(assetYear) == year {
-                        matchingAssets.append(asset)
-                        if matchingAssets.count >= 4 { // Only need 4 for preview
-                            break
-                        }
-                    }
-                }
-            }
-            
+
             // Load images for the matching assets
-            for asset in matchingAssets.prefix(4) {
+            for asset in assets.objects(at: IndexSet(integersIn: 0..<min(4, assets.count))) {
                 await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                     var hasResumed = false
                     imageManager.requestImage(
@@ -261,13 +280,13 @@ class MediaDataManager: ObservableObject {
                         options: requestOptions
                     ) { image, info in
                         guard !hasResumed else { return }
-                        
+
                         if let info = info,
                            let isDegraded = info[PHImageResultIsDegradedKey] as? Bool,
                            isDegraded {
                             return
                         }
-                        
+
                         hasResumed = true
                         if let image = image {
                             images.append(image)
@@ -276,11 +295,9 @@ class MediaDataManager: ObservableObject {
                     }
                 }
             }
-            
+
             self.yearPreviewImages[year] = images
         }
-        
-        print("📸 Loaded year preview images for \(yearsList.count) years")
     }
     
     private func loadAlbumPreviewImages() async {
@@ -330,8 +347,6 @@ class MediaDataManager: ObservableObject {
             
             self.albumPreviewImages[albumTitle] = images
         }
-        
-        print("🎨 Loaded album preview images for \(folders.count) albums")
     }
     
     private func startProgressCalculation() async {
@@ -349,7 +364,5 @@ class MediaDataManager: ObservableObject {
         self.categoryProgress = categoryResults
         self.yearProgress = yearResults
         self.albumProgress = albumResults
-        
-        print("📊 Loaded progress data")
     }
 }

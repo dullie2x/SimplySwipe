@@ -20,11 +20,21 @@ class StoreKitManager: NSObject, ObservableObject {
 
     private override init() {
         super.init()
-        
+
+        // Restore last-known premium status immediately so canSwipe is correct
+        // before the async StoreKit entitlement check completes.
+        self.isPremium = UserDefaults.standard.bool(forKey: "cachedIsPremium")
+
+        // Verify entitlements on every launch (separate from the infinite listener).
         Task {
             await requestProducts()
-            await listenForTransactions()
             await checkEntitlements()
+        }
+
+        // Start the transaction update listener in its own Task so it never
+        // blocks checkEntitlements() above (listenForTransactions never returns).
+        Task {
+            await listenForTransactions()
         }
     }
     
@@ -34,17 +44,13 @@ class StoreKitManager: NSObject, ObservableObject {
         do {
             let storeProducts = try await Product.products(for: ProductID.allCases.map { $0.rawValue })
             self.products = storeProducts
-            print("✅ Products loaded: \(storeProducts.map { $0.id })")
-        } catch {
-            print("❌ Failed to fetch products: \(error)")
-        }
+        } catch { _ = error }
     }
 
     // MARK: - Purchase
     @MainActor
     func purchase(_ productID: ProductID) {
         guard let product = products.first(where: { $0.id == productID.rawValue }) else {
-            print("❌ Product \(productID.rawValue) not found.")
             return
         }
 
@@ -55,22 +61,19 @@ class StoreKitManager: NSObject, ObservableObject {
                 case .success(let verification):
                     switch verification {
                     case .unverified:
-                        print("⚠️ Purchase unverified.")
+                        break
                     case .verified(let transaction):
                         await transaction.finish()
                         handlePurchased(productID: productID)
-                        print("✅ Purchase successful for \(productID.rawValue)")
                     }
                 case .userCancelled:
-                    print("🛑 Purchase cancelled by user.")
+                    break
                 case .pending:
-                    print("⏳ Purchase pending.")
+                    break
                 @unknown default:
-                    print("❓ Unknown purchase result.")
+                    break
                 }
-            } catch {
-                print("❌ Purchase error: \(error)")
-            }
+            } catch { _ = error }
         }
     }
 
@@ -80,9 +83,7 @@ class StoreKitManager: NSObject, ObservableObject {
             do {
                 try await AppStore.sync()
                 await checkEntitlements()
-            } catch {
-                print("❌ Restore failed: \(error)")
-            }
+            } catch { _ = error }
         }
     }
 
@@ -115,6 +116,8 @@ class StoreKitManager: NSObject, ObservableObject {
 
         let wasPremium = self.isPremium
         self.isPremium = hasActiveSubscription
+        // Persist so the next launch loads the correct value before async check completes
+        UserDefaults.standard.set(hasActiveSubscription, forKey: "cachedIsPremium")
 
         // Notify UI if premium status changed
         if wasPremium != self.isPremium {
@@ -128,6 +131,7 @@ class StoreKitManager: NSObject, ObservableObject {
         case .monthly, .yearly, .lifetime:
             DispatchQueue.main.async {
                 self.isPremium = true
+                UserDefaults.standard.set(true, forKey: "cachedIsPremium")
                 NotificationCenter.default.post(name: .swipeCountChanged, object: nil)
             }
         case .extraSwipes:

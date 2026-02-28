@@ -180,7 +180,9 @@ struct FilteredMediaCardContainer: View {
         let cardOpacity = calculateOpacity()
         let rotationAngle = calculateRotation()
         
-        FilteredMediaCardView(
+        let isFocused = index == viewModel.previewIndex
+
+        return FilteredMediaCardView(
             asset: asset,
             size: cardSize,
             offset: createOffsetValue(),
@@ -188,20 +190,32 @@ struct FilteredMediaCardContainer: View {
             player: viewModel.getPlayer(for: index),
             highQualityImage: viewModel.getHighQualityImage(for: index),
             lowQualityImage: viewModel.getLowQualityImage(for: index),
-            isCurrentlyFocused: index == viewModel.previewIndex,
-            isMuted: $viewModel.currentAssetMuted
+            isCurrentlyFocused: isFocused,
+            isMuted: $viewModel.currentAssetMuted,
+            zoomScale: isFocused ? viewModel.zoomScale : 1.0,
+            zoomOffset: isFocused ? viewModel.zoomOffset : .zero
         )
         .frame(width: cardSize.width, height: cardSize.height)
         .clipped()
+        .background(
+            WindowPinchInstaller(
+                isActive: isFocused,
+                onBegan: { viewModel.handleWindowPinchBegan() },
+                onChanged: { deltaScale, centroid, centroidDelta in
+                    viewModel.handleWindowPinchChanged(
+                        deltaScale: deltaScale,
+                        centroid: centroid,
+                        centroidDelta: centroidDelta,
+                        cardSize: cardSize
+                    )
+                },
+                onEnded: { viewModel.handleWindowPinchEnded() }
+            )
+        )
         .offset(cardOffset)
         .rotationEffect(.degrees(rotationAngle))
         .opacity(cardOpacity)
         .zIndex(Double(viewModel.paginatedMediaItems.count - index))
-//        .onTapGesture {
-//            if index == viewModel.previewIndex {
-//                viewModel.handleTap()
-//            }
-//        }
         // Stable ID per asset
         .id(asset.localIdentifier)
     }
@@ -244,26 +258,29 @@ struct FilteredMainContentView: View {
     
     var body: some View {
         let canSwipe = viewModel.swipeData.isPremium || viewModel.swipeData.remainingSwipes() > 0
-        
+
         mediaCardsStack
             .clipped()
             .gesture(createDragGesture(canSwipe: canSwipe))
     }
-    
+
     private var mediaCardsStack: some View {
         ZStack {
-            // Use stable identity per asset to avoid tearing down views when indexes shift
-            ForEach(Array(viewModel.paginatedMediaItems.enumerated()), id: \.element.localIdentifier) { index, asset in
-                FilteredMediaCardContainer(
-                    asset: asset,
-                    index: index,
-                    viewModel: viewModel,
-                    geometry: geometry
-                )
+            // Render cards based on their actual index in paginatedMediaItems
+            ForEach(viewModel.paginatedMediaItems.indices, id: \.self) { index in
+                if index < viewModel.paginatedMediaItems.count {
+                    let asset = viewModel.paginatedMediaItems[index]
+                    FilteredMediaCardContainer(
+                        asset: asset,
+                        index: index,
+                        viewModel: viewModel,
+                        geometry: geometry
+                    )
+                }
             }
         }
     }
-    
+
     private func createDragGesture(canSwipe: Bool) -> some Gesture {
         DragGesture()
             .onChanged { value in
@@ -273,11 +290,13 @@ struct FilteredMainContentView: View {
                 viewModel.handleDragEnded(
                     value: value,
                     geometry: geometry,
-                    canSwipe: viewModel.swipeData.remainingSwipes() > 0
+                    canSwipe: viewModel.swipeData.remainingSwipes() > 0 || viewModel.swipeData.isPremium
                 )
             }
     }
+
 }
+
 
 // MARK: - Caption Overlay View
 struct FilteredCaptionOverlayView: View {

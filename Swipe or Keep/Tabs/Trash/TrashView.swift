@@ -64,17 +64,17 @@ struct TrashView: View {
                     onClose: { selectedAssetForFullScreen = nil }
                 )
             }
-            .actionSheet(isPresented: $showConfirmationDialog) {
-                ActionSheet(
-                    title: Text("Are you sure you want to delete these items?"),
-                    message: Text("These items will be added to your 'Recently Deleted Album'"),
-                    buttons: [
-                        .destructive(Text("Delete"), action: {
-                            performDelete()
-                        }),
-                        .cancel()
-                    ]
-                )
+            .confirmationDialog(
+                "Are you sure you want to delete these items?",
+                isPresented: $showConfirmationDialog,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    performDelete()
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("These items will be added to your 'Recently Deleted Album'")
             }
             .alert("Enjoying Simply Swipe?", isPresented: $showRatingPrompt) {
                 Button("Yes") {
@@ -321,8 +321,7 @@ struct TrashView: View {
                         showFeedback(message: "Items Added to Recently Deleted Folder!", isSuccess: true)
 
                         promptForAppRatingIfNeeded()
-                    } else if let error = error {
-                        print("Failed to delete assets: \(error)")
+                    } else if error != nil {
                         showFeedback(message: "Failed to delete items", isSuccess: false)
                     }
                     isDeleting = false

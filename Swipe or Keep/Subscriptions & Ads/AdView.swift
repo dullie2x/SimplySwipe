@@ -144,7 +144,6 @@ struct AdView: View {
             if adState == .error && !rewardAlreadyGranted {
                 SwipeData.shared.addExtraSwipes(10)
                 rewardAlreadyGranted = true
-                print("🎁 Granted fallback reward via close button")
             }
             dismiss()
         }) {
@@ -160,33 +159,26 @@ struct AdView: View {
     
     // FIXED: Prevent double execution and better reward logic
     private func startAdSequence() {
-        print("📱 AdView: Starting ad sequence")
         adState = .loading
         rewardAlreadyGranted = false
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             guard let rootVC = findRootViewController() else {
-                print("❌ AdView: No root view controller")
                 handleAdError()
                 return
             }
             
-            print("🎬 AdView: Attempting to present ad from \(type(of: rootVC))")
             
             adState = .displaying
             
             adHelper.showRewardedAd(from: rootVC) {
                 DispatchQueue.main.async {
-                    print("🏁 Ad finished / dismissed")
                     
                     if adHelper.wasRewardEarned() {
-                        print("✅ Reward was earned, granting swipes and showing completed view")
                         SwipeData.shared.addExtraSwipes(10)
                         rewardAlreadyGranted = true
-                        print("🎁 Added 10 extra swipes. New total: \(SwipeData.shared.extraSwipes)")
                         adState = .complete
                     } else {
-                        print("⚠️ No reward earned, showing error view for fallback")
                         adState = .error
                     }
                     
@@ -228,7 +220,6 @@ struct AdView: View {
     }
     
     private func handleAdError() {
-        print("⚠️ AdView: Handling ad error")
         adState = .error
         
         withAnimation {
@@ -238,12 +229,9 @@ struct AdView: View {
     
     private func grantRewardAndDismiss() {
         if !rewardAlreadyGranted {
-            print("🎁 AdView: Granting fallback reward via Continue button")
             SwipeData.shared.addExtraSwipes(10)
             rewardAlreadyGranted = true
-            print("🎁 Fallback reward granted. New extra swipes total: \(SwipeData.shared.extraSwipes)")
         } else {
-            print("⚠️ AdView: Reward already granted, just changing state")
         }
         adState = .complete
     }

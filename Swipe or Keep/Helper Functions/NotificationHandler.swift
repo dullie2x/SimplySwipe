@@ -14,4 +14,6 @@ extension Notification.Name {
 extension Notification.Name {
     static let navigateToMainTab = Notification.Name("navigateToMainTab")
     static let goHomeFromFiltered = Notification.Name("goHomeFromFiltered")
+    static let cleanupOldTabResources = Notification.Name("cleanupOldTabResources")
+    static let searchStateChanged = Notification.Name("searchStateChanged")
 }

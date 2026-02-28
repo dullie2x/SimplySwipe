@@ -1,6 +1,5 @@
 import SwiftUI
 import GoogleMobileAds
-import StoreKit
 import AVFoundation
 
 // MARK: - App Font
@@ -42,13 +41,16 @@ struct Swipe_or_KeepApp: App {
 
         // Pass delegate reference used elsewhere in your app
         AdHelper.shared.appDelegate = appDelegate
+        
+        // Get new random quote on app launch
+        QuotesManager.shared.selectRandomQuote()
     }
 
     var body: some Scene {
         WindowGroup {
             SplashView()
                 .environmentObject(AdHelper.shared)
-                // ✅ Global SwiftUI font override (affects all Text by default)
+                // Global SwiftUI font override (affects all Text by default)
                 .environment(\.font, AppFont.swiftUIFont(for: .body))
         }
     }
@@ -72,8 +74,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
         // (Optional) Dump fonts once in DEBUG to confirm PostScript names
         #if DEBUG
         for family in UIFont.familyNames.sorted() {
-            let names = UIFont.fontNames(forFamilyName: family).joined(separator: ", ")
-            print("🅵 \(family): \(names)")
+            _ = UIFont.fontNames(forFamilyName: family)
         }
         #endif
 
@@ -82,7 +83,6 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
 
         // Initialize Google Mobile Ads and preload a rewarded ad
         MobileAds.shared.start { status in
-            print("📱 Google Mobile Ads SDK initialization status: \(status)")
             self.loadRewardedAd()
         }
 
@@ -94,9 +94,8 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
         do {
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setCategory(.playback, mode: .moviePlayback, options: [.mixWithOthers])
-            print("🎵 Audio session configured for video playback but allowing background music")
         } catch {
-            print("❌ Failed to configure initial audio session: \(error)")
+            print("Failed to configure audio session: \(error.localizedDescription)")
         }
     }
 
@@ -105,9 +104,8 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
         do {
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setActive(true)
-            print("🎬 Audio session activated - background music stopped")
         } catch {
-            print("❌ Failed to activate audio session: \(error)")
+            print("Failed to activate video playback: \(error.localizedDescription)")
         }
     }
 
@@ -116,9 +114,8 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
         do {
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
-            print("🎵 Audio session deactivated - background music can resume")
         } catch {
-            print("❌ Failed to deactivate audio session: \(error)")
+            print("Failed to allow background music: \(error.localizedDescription)")
         }
     }
 
@@ -126,12 +123,10 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
     func loadRewardedAd() {
         // Skip if already loading or an ad is in memory
         if isLoadingAd || rewardedAd != nil {
-            print("⚠️ Ad already loading or already loaded, skipping duplicate request")
             return
         }
 
         isLoadingAd = true
-        print("📲 Starting to load rewarded ad")
 
         let request = Request()
 
@@ -139,14 +134,12 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
             guard let self = self else { return }
             self.isLoadingAd = false
 
-            if let error = error {
-                print("❌ Failed to load rewarded ad: \(error.localizedDescription)")
+            if error != nil {
                 return
             }
 
             self.rewardedAd = ad
             self.rewardedAd?.fullScreenContentDelegate = self
-            print("✅ Rewarded ad loaded successfully")
         }
     }
 
@@ -159,13 +152,10 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
         self.adDismissedHandler = completion
 
         if let ad = self.rewardedAd {
-            print("🎬 Presenting rewarded ad")
             DispatchQueue.main.async {
                 ad.present(from: viewController) { [weak self] in
                     guard let self = self else { return }
-                    print("🎁 User earned reward!")
                     self.rewardEarned = true
-                    print("✅ AppDelegate: rewardEarned set to \(self.rewardEarned)")
 
                     // DON'T call completion here - it will be called when ad dismisses
                     // Clear used ad
@@ -173,7 +163,6 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
                 }
             }
         } else {
-            print("⚠️ Rewarded ad not ready")
             self.loadRewardedAd()
             // Only call completion immediately if there's no ad to show
             DispatchQueue.main.async {
@@ -186,8 +175,6 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
     // MARK: - GADFullScreenContentDelegate
 
     func adDidDismissFullScreenContent(_ ad: FullScreenPresentingAd) {
-        print("🏁 Ad dismissed")
-        print("📊 Final reward status in AppDelegate: \(rewardEarned)")
 
         // IMPORTANT: Call completion FIRST while reward status is still valid
         DispatchQueue.main.async {
@@ -206,11 +193,9 @@ class AppDelegate: NSObject, UIApplicationDelegate, FullScreenContentDelegate {
     }
 
     func adDidRecordImpression(_ ad: FullScreenPresentingAd) {
-        print("👁️ Ad recorded impression")
     }
 
     func ad(_ ad: FullScreenPresentingAd, didFailToPresentFullScreenContentWithError error: Error) {
-        print("❌ Ad failed to present with error: \(error.localizedDescription)")
 
         // Resume UI flows
         DispatchQueue.main.async {

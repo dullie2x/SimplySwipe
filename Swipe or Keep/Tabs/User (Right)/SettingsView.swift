@@ -6,6 +6,9 @@ struct SettingsView: View {
     @State private var showingPrivacyPolicy = false
     @State private var showingTermsOfUse = false
     @State private var isResetting = false // Add loading state
+    #if DEBUG
+    @State private var showingNewUserResetConfirmation = false
+    #endif
     
     private let privacyPolicyURL = URL(string: "https://www.ariestates.com/simply-swipe")!
     private let termsOfUseURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
@@ -49,21 +52,40 @@ struct SettingsView: View {
                 VStack(spacing: 12) {
                     Button("Reset Swiping Progress (Debug)") {
                         SwipedMediaManager.shared.resetAllSwipedMedia()
-                        print("Debug: Swiped media progress reset")
                     }
                     .foregroundColor(.orange)
                     .padding()
                     .background(Color.orange.opacity(0.1))
                     .cornerRadius(8)
-                    
+
                     Button("Clear Daily Swipe Limits (Debug)") {
                         SwipeData.shared.clearAllData()
-                        print("Debug: Daily swipe limits cleared")
                     }
                     .foregroundColor(.red)
                     .padding()
                     .background(Color.red.opacity(0.1))
                     .cornerRadius(8)
+
+                    Button("🔴 Reset to New User (Debug)") {
+                        showingNewUserResetConfirmation = true
+                    }
+                    .foregroundColor(.white)
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.red)
+                    .cornerRadius(8)
+                }
+                .confirmationDialog(
+                    "Reset to New User?",
+                    isPresented: $showingNewUserResetConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Reset Everything", role: .destructive) {
+                        resetToNewUser()
+                    }
+                    Button("Cancel", role: .cancel) { }
+                } message: {
+                    Text("This will wipe all swipe history, daily limits, onboarding, tooltips, and app rating state — exactly like a fresh install.")
                 }
                 #endif
                 
@@ -130,12 +152,23 @@ struct SettingsView: View {
         // Reset the data first
         SwipedMediaManager.shared.resetAllSwipedMedia()
         
-        // Force MediaDataManager to refresh all progress values immediately
+        // Force ProgressManager to invalidate and recalculate all progress
         Task {
-            await MediaDataManager.shared.refreshAllProgress()
+            // Invalidate all caches in ProgressManager
+            await ProgressManager.shared.invalidateCache()
             
-            // Post notifications after refresh is complete
-            DispatchQueue.main.async {
+            // Manually trigger recalculation by fetching fresh progress
+            let categoryResults = await ProgressManager.shared.getCategoryProgress()
+            let yearResults = await ProgressManager.shared.getYearProgress(for: MediaDataManager.shared.yearsList)
+            let albumResults = await ProgressManager.shared.getAlbumProgress(for: MediaDataManager.shared.folders)
+            
+            // Update MediaDataManager's published properties on main actor
+            await MainActor.run {
+                MediaDataManager.shared.categoryProgress = categoryResults
+                MediaDataManager.shared.yearProgress = yearResults
+                MediaDataManager.shared.albumProgress = albumResults
+                
+                // Post notifications after refresh is complete
                 NotificationCenter.default.post(name: .swipeCountChanged, object: nil)
                 NotificationCenter.default.post(name: NSNotification.Name("ProgressDidReset"), object: nil)
                 
@@ -146,7 +179,6 @@ struct SettingsView: View {
             }
         }
         
-        print("Reset complete: ALL items are now unreviewed. Progress updating...")
     }
     
     private func resetUserDefaults() {
@@ -175,14 +207,7 @@ struct SettingsView: View {
         DispatchQueue.main.async {
             // Post multiple notifications to ensure all UI components refresh
             NotificationCenter.default.post(name: .swipeCountChanged, object: nil)
-            
-            // Force SwipedMediaManager to update its published properties
-            // Since it's @MainActor, we need to access its properties to trigger updates
-            let currentCount = SwipedMediaManager.shared.swipeCount
-            let trashedAssets = SwipedMediaManager.shared.trashedMediaAssets
-            
-            print("Force refresh - SwipeCount: \(currentCount), Trashed: \(trashedAssets.count)")
-            
+
             // Post a custom notification for progress updates
             NotificationCenter.default.post(
                 name: NSNotification.Name("ProgressDidReset"),
@@ -190,6 +215,43 @@ struct SettingsView: View {
             )
         }
     }
+
+    #if DEBUG
+    private func resetToNewUser() {
+        let defaults = UserDefaults.standard
+
+        // Swipe history & trash
+        SwipedMediaManager.shared.resetAllSwipedMedia()
+
+        // Daily swipe counts & Keychain data
+        SwipeData.shared.clearAllData()
+
+        // Onboarding & tooltips
+        defaults.removeObject(forKey: "completedWelcomeOnboarding")
+        defaults.removeObject(forKey: "seenRandomTooltip")
+        defaults.removeObject(forKey: "seenMainTooltip")
+        defaults.removeObject(forKey: "seenTrashTooltip")
+        defaults.removeObject(forKey: "seenUserTooltip")
+
+        // App rating state
+        defaults.removeObject(forKey: "app.rating.prompt.counter")
+        defaults.removeObject(forKey: "app.rating.last.prompt.date")
+        defaults.removeObject(forKey: "app.has.rated.app")
+
+        // Premium cache
+        defaults.removeObject(forKey: "cachedIsPremium")
+
+        // Photo/video counts
+        defaults.removeObject(forKey: "photoCount")
+        defaults.removeObject(forKey: "videoCount")
+
+        defaults.synchronize()
+
+        // Refresh UI
+        NotificationCenter.default.post(name: .swipeCountChanged, object: nil)
+        NotificationCenter.default.post(name: NSNotification.Name("ProgressDidReset"), object: nil)
+    }
+    #endif
 }
 
 // Safari View Controller wrapper

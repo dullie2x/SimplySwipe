@@ -32,12 +32,25 @@ struct UserView: View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 0) {
-                    // Header
-                    Text("User Stats")
-                        .font(.custom(AppFont.regular, size: 38))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.bottom, 15)
+                    // Header with settings gear placed directly in the layout
+                    // (avoids SwiftUI ToolbarItem rendering bug inside TabView)
+                    ZStack {
+                        Text("User Stats")
+                            .font(.custom(AppFont.regular, size: 38))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity, alignment: .center)
+
+                        HStack {
+                            Spacer()
+                            NavigationLink(destination: SettingsView()) {
+                                Image(systemName: "gearshape.fill")
+                                    .foregroundColor(.white)
+                                    .imageScale(.large)
+                                    .padding(.trailing, 20)
+                            }
+                        }
+                    }
+                    .padding(.bottom, 15)
                     
                     // Stats Section
                     VStack(spacing: 15) {
@@ -183,15 +196,7 @@ struct UserView: View {
                 PaywallView()
             }
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink(destination: SettingsView()) {
-                        Image(systemName: "gearshape.fill")
-                            .foregroundColor(.white)
-                            .imageScale(.large)
-                    }
-                }
-            }
+            .navigationBarHidden(true)
         }
     }
     

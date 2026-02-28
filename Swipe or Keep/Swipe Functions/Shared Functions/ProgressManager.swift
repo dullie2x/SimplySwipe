@@ -68,52 +68,44 @@ actor ProgressManager {
                 }
 
                 group.addTask {
-                    let progress: Double = await withCheckedContinuation { continuation in
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            let isFullYear = year.count == 4 && Int(year) != nil
+                    let isFullYear = year.count == 4 && Int(year) != nil
 
-                            let fetchOptions = PHFetchOptions()
-                            fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-                            let allAssets = PHAsset.fetchAssets(with: fetchOptions)
+                    let fetchOptions = PHFetchOptions()
+                    fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+                    let allAssets = PHAsset.fetchAssets(with: fetchOptions)
 
-                            Task {
-                                let swipedIdentifiers = await MainActor.run {
-                                    SwipedMediaManager.shared.getSwipedMediaIdentifiers()
-                                }
+                    let swipedIdentifiers = await MainActor.run {
+                        SwipedMediaManager.shared.getSwipedMediaIdentifiers()
+                    }
 
-                                var totalCount = 0
-                                var swipedCount = 0
-                                let calendar = Calendar.current
-                                let df = DateFormatter()
-                                df.dateFormat = "MMM ''yy"
+                    var totalCount = 0
+                    var swipedCount = 0
+                    let calendar = Calendar.current
+                    let df = DateFormatter()
+                    df.dateFormat = "MMM ''yy"
 
-                                PHAssetBatchProcessor.processBatched(fetchResult: allAssets, batchSize: 500) { asset in
-                                    guard let creationDate = asset.creationDate else { return }
+                    PHAssetBatchProcessor.processBatched(fetchResult: allAssets, batchSize: 500) { asset in
+                        guard let creationDate = asset.creationDate else { return }
 
-                                    let matches: Bool
-                                    if isFullYear {
-                                        let assetYear = calendar.component(.year, from: creationDate)
-                                        matches = String(assetYear) == year
-                                    } else {
-                                        let formatted = df.string(from: creationDate)
-                                        matches = formatted == year
-                                    }
+                        let matches: Bool
+                        if isFullYear {
+                            let assetYear = calendar.component(.year, from: creationDate)
+                            matches = String(assetYear) == year
+                        } else {
+                            let formatted = df.string(from: creationDate)
+                            matches = formatted == year
+                        }
 
-                                    if matches {
-                                        totalCount += 1
-                                        if swipedIdentifiers.contains(asset.localIdentifier) {
-                                            swipedCount += 1
-                                        }
-                                    }
-                                }
-
-                                let value = totalCount > 0 ? Double(swipedCount) / Double(totalCount) : 0.0
-                                continuation.resume(returning: value)
+                        if matches {
+                            totalCount += 1
+                            if swipedIdentifiers.contains(asset.localIdentifier) {
+                                swipedCount += 1
                             }
                         }
                     }
 
-                    return (year, progress)
+                    let value = totalCount > 0 ? Double(swipedCount) / Double(totalCount) : 0.0
+                    return (year, value)
                 }
             }
 

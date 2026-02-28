@@ -38,6 +38,15 @@ class OnboardingManager: ObservableObject {
         showMainTooltip = true
         showTrashTooltip = true
         showUserTooltip = true
+
+        // Safety net: if the splash timed out before photo permission was granted,
+        // the home screen will be empty. Reload now that onboarding is done.
+        Task { @MainActor in
+            let dataManager = MediaDataManager.shared
+            if dataManager.yearsList.isEmpty || dataManager.sectionPreviewImages.isEmpty {
+                await dataManager.loadAllData()
+            }
+        }
     }
 
     func dismissTooltip(for view: String) {

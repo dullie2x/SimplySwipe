@@ -65,76 +65,8 @@ class MediaManager {
             }
         }
     }
-    
-    // Updated to call completion for each image rather than all at once
-    // Make sure low-quality image fetching is very fast
-    func prefetchLowQualityImages(for media: [PHAsset], completion: @escaping (Int, UIImage?) -> Void) {
-        DispatchQueue.global(qos: .userInteractive).async { // Change to highest priority
-            let manager = PHImageManager.default()
-            let options = PHImageRequestOptions()
-            options.deliveryMode = .fastFormat
-            options.isSynchronous = false
-            options.resizeMode = .fast // Prioritize speed
-            
-            // Process all thumbnails first as they're critical for UI responsiveness
-            for (index, asset) in media.enumerated() {
-                manager.requestImage(for: asset,
-                                     targetSize: CGSize(width: 300, height: 300),
-                                     contentMode: .aspectFill,
-                                     options: options) { result, _ in
-                    if let result = result {
-                        DispatchQueue.main.async {
-                            completion(index, result)
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
+
     // MARK: - Video Management
-    // Updated to process videos in batches and call completion for each video
-    func preloadVideos(for media: [PHAsset], completion: @escaping (Int, AVQueuePlayer?, AVPlayerLooper?) -> Void) {
-        DispatchQueue.global(qos: .background).async {
-            let manager = PHImageManager.default()
-            let options = PHVideoRequestOptions()
-            options.deliveryMode = .mediumQualityFormat // Changed from highQuality to save memory
-            options.isNetworkAccessAllowed = true
-            
-            // Find video assets
-            let videoIndices = media.enumerated()
-                .filter { $0.element.mediaType == .video }
-                .map { $0.offset }
-            
-            // Process in smaller batches to avoid memory spikes
-            let batchSize = 3 // Smaller batch size for videos as they use more memory
-            for batchStart in stride(from: 0, to: videoIndices.count, by: batchSize) {
-                autoreleasepool {
-                    let batchEnd = min(batchStart + batchSize, videoIndices.count)
-                    for i in batchStart..<batchEnd {
-                        let index = videoIndices[i]
-                        let asset = media[index]
-                        
-                        manager.requestPlayerItem(forVideo: asset, options: options) { playerItem, _ in
-                            if let playerItem = playerItem {
-                                DispatchQueue.main.async {
-                                    let player = AVQueuePlayer(playerItem: playerItem)
-                                    let looper = AVPlayerLooper(player: player, templateItem: playerItem)
-                                    player.pause()
-                                    player.volume = 0.0
-                                    completion(index, player, looper)
-                                }
-                            } else {
-                                DispatchQueue.main.async {
-                                    completion(index, nil, nil)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
     
     // Updated to work with NSCache
     func pauseNonFocusedVideos(players: NSCache<NSNumber, CachedPlayer>, currentIndex: Int) {

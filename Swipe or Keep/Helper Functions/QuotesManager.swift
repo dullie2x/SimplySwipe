@@ -1,18 +1,36 @@
-//
-//  QuotesManager.swift
-//  Swipe or Keep
-//
-//  Created by Gbolade Ariyo on 10/3/25.
-//
+import Foundation
 
-import SwiftUI
-
-struct QuotesManager: View {
-    var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+class QuotesManager: ObservableObject {
+    static let shared = QuotesManager()
+    
+    @Published var currentQuote: String = ""
+    
+    private let quotes = [
+        "you got this!",
+        "one step at a time",
+        "progress over perfection",
+        "small wins matter",
+        "keep going",
+        "you're doing great",
+        "trust the process",
+        "clarity is coming",
+        "less is more",
+        "breathe and begin",
+        "make space for what matters",
+        "simplicity wins",
+        "you're stronger than you think",
+        "focus on today",
+        "let it go",
+        "start where you are",
+        "done is better than perfect",
+        "keep it simple"
+    ]
+    
+    private init() {
+        selectRandomQuote()
     }
-}
-
-#Preview {
-    QuotesManager()
+    
+    func selectRandomQuote() {
+        currentQuote = quotes.randomElement() ?? "you got this!"
+    }
 }

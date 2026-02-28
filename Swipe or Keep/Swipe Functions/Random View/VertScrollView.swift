@@ -53,9 +53,6 @@ struct VertScroll: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
             viewModel.handleAppWillEnterBackground()
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-            viewModel.handleAppReturnFromBackground()
-        }
         // Paywall changes may affect preload cadence
         .onReceive(NotificationCenter.default.publisher(for: .swipeCountChanged)) { _ in
             Task { @MainActor in
@@ -95,6 +92,7 @@ struct VertScroll: View {
             case .background:
                 // Ensure gesture state is clean when backgrounded
                 viewModel.handleAppWillEnterBackground()
+                SwipedMediaManager.shared.flushPendingSave()
             @unknown default:
                 break
             }
@@ -103,17 +101,12 @@ struct VertScroll: View {
             PaywallMaxView()
         }
         .hideNavBarCompat()
-        .onChange(of: viewModel.previewIndex) {
-            if let currentAsset = viewModel.safeCurrentAsset() {
-                print("[VertScroll] previewIndex=\(viewModel.previewIndex) → assetID=\(currentAsset.localIdentifier)")
-            }
-        }
+        .onChange(of: viewModel.previewIndex) { }
         // ADDITIONAL FIX: Handle device orientation changes that might mess up gesture state
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             // Small delay to let orientation settle, then reset any stuck gestures
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 if viewModel.isDragging {
-                    print("📱 Orientation changed during drag - resetting gesture state")
                     viewModel.resetGestureState()
                 }
             }

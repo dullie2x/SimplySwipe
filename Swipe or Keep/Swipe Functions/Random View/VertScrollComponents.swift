@@ -127,7 +127,9 @@ struct MediaCardContainer: View {
         let cardOpacity = calculateOpacity()
         let rotationAngle = calculateRotation()
         
-        MediaCardView(
+        let isFocused = index == viewModel.previewIndex
+
+        return MediaCardView(
             asset: asset,
             size: cardSize,
             offset: createOffsetValue(),
@@ -135,19 +137,33 @@ struct MediaCardContainer: View {
             player: viewModel.getPlayer(for: index),
             highQualityImage: viewModel.getHighQualityImage(for: index),
             lowQualityImage: viewModel.getLowQualityImage(for: index),
-            isCurrentlyFocused: index == viewModel.previewIndex   // focus driven only by index
+            isCurrentlyFocused: isFocused,
+            zoomScale: isFocused ? viewModel.zoomScale : 1.0,
+            zoomOffset: isFocused ? viewModel.zoomOffset : .zero
         )
         .frame(width: cardSize.width, height: cardSize.height)
         .clipped()
+        // Window-level pinch installer: only active for the focused card.
+        // Lives on the UIWindow so it never interferes with SwiftUI's DragGesture.
+        .background(
+            WindowPinchInstaller(
+                isActive: isFocused,
+                onBegan: { viewModel.handleWindowPinchBegan() },
+                onChanged: { deltaScale, centroid, centroidDelta in
+                    viewModel.handleWindowPinchChanged(
+                        deltaScale: deltaScale,
+                        centroid: centroid,
+                        centroidDelta: centroidDelta,
+                        cardSize: cardSize
+                    )
+                },
+                onEnded: { viewModel.handleWindowPinchEnded() }
+            )
+        )
         .offset(cardOffset)
         .rotationEffect(.degrees(rotationAngle))
         .opacity(cardOpacity)
         .zIndex(Double(viewModel.paginatedMediaItems.count - index))
-//        .onTapGesture {
-//            if index == viewModel.previewIndex {
-//                viewModel.handleTap()
-//            }
-//        }
         // IMPORTANT: do NOT tie .id to the index; keep it stable per asset only
         .id(asset.localIdentifier)
     }
@@ -190,12 +206,12 @@ struct MainContentView: View {
     
     var body: some View {
         let canSwipe = viewModel.swipeData.isPremium || viewModel.swipeData.remainingSwipes() > 0
-        
+
         mediaCardsStack
             .clipped()
             .gesture(createDragGesture(canSwipe: canSwipe))
     }
-    
+
     private var mediaCardsStack: some View {
         ZStack {
             // Use stable identity per asset to avoid tearing down views when indexes shift
@@ -209,7 +225,7 @@ struct MainContentView: View {
             }
         }
     }
-    
+
     private func createDragGesture(canSwipe: Bool) -> some Gesture {
         DragGesture()
             .onChanged { value in
@@ -223,7 +239,134 @@ struct MainContentView: View {
                 )
             }
     }
+
 }
+
+
+// MARK: - Window-Level Pinch Installer
+// Attaches a UIPinchGestureRecognizer to the UIWindow, completely outside the SwiftUI
+// view hierarchy. This means SwiftUI's DragGesture never sees a competing UIKit view
+// in its hit-test path — swipes, labels, and animations all work normally.
+
+struct WindowPinchInstaller: UIViewRepresentable {
+    let isActive: Bool
+    let onBegan: () -> Void
+    let onChanged: (_ deltaScale: CGFloat, _ centroid: CGPoint, _ centroidDelta: CGPoint) -> Void
+    let onEnded: () -> Void
+
+    func makeUIView(context: Context) -> PinchInstallerView {
+        let view = PinchInstallerView()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        view.coordinator = context.coordinator
+        return view
+    }
+
+    func updateUIView(_ uiView: PinchInstallerView, context: Context) {
+        context.coordinator.onBegan = onBegan
+        context.coordinator.onChanged = onChanged
+        context.coordinator.onEnded = onEnded
+        context.coordinator.isActive = isActive
+
+        if isActive, let window = uiView.window {
+            context.coordinator.installRecognizer(on: window)
+        } else if !isActive {
+            context.coordinator.removeRecognizer()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onBegan: onBegan, onChanged: onChanged, onEnded: onEnded)
+    }
+
+    class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var isActive: Bool = false
+        var onBegan: () -> Void
+        var onChanged: (_ deltaScale: CGFloat, _ centroid: CGPoint, _ centroidDelta: CGPoint) -> Void
+        var onEnded: () -> Void
+
+        private var recognizer: UIPinchGestureRecognizer?
+        private var lastCentroid: CGPoint = .zero
+
+        init(
+            onBegan: @escaping () -> Void,
+            onChanged: @escaping (_ deltaScale: CGFloat, _ centroid: CGPoint, _ centroidDelta: CGPoint) -> Void,
+            onEnded: @escaping () -> Void
+        ) {
+            self.onBegan = onBegan
+            self.onChanged = onChanged
+            self.onEnded = onEnded
+        }
+
+        deinit { removeRecognizer() }
+
+        func installRecognizer(on window: UIWindow) {
+            guard recognizer == nil else { return }
+            let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
+            pinch.cancelsTouchesInView = false
+            pinch.delegate = self
+            window.addGestureRecognizer(pinch)
+            recognizer = pinch
+        }
+
+        func removeRecognizer() {
+            if let r = recognizer {
+                r.view?.removeGestureRecognizer(r)
+                recognizer = nil
+            }
+        }
+
+        // Allow the pinch to fire alongside SwiftUI's internal gesture recognizers
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
+        ) -> Bool { true }
+
+        @objc func handlePinch(_ gesture: UIPinchGestureRecognizer) {
+            guard let view = gesture.view else { return }
+            let centroid = gesture.location(in: view)
+
+            switch gesture.state {
+            case .began:
+                lastCentroid = centroid
+                gesture.scale = 1.0
+                onBegan()
+
+            case .changed:
+                let deltaScale = gesture.scale
+                gesture.scale = 1.0
+                let centroidDelta = CGPoint(
+                    x: centroid.x - lastCentroid.x,
+                    y: centroid.y - lastCentroid.y
+                )
+                lastCentroid = centroid
+                onChanged(deltaScale, centroid, centroidDelta)
+
+            case .ended, .cancelled:
+                onEnded()
+
+            default:
+                break
+            }
+        }
+    }
+}
+
+/// Zero-size UIView that notifies the Coordinator when it enters/leaves the window,
+/// so the gesture recognizer can be installed/removed at the right time.
+class PinchInstallerView: UIView {
+    weak var coordinator: WindowPinchInstaller.Coordinator?
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if let window = window, coordinator?.isActive == true {
+            coordinator?.installRecognizer(on: window)
+        } else if window == nil {
+            coordinator?.removeRecognizer()
+        }
+    }
+}
+
 
 // MARK: - Caption Overlay View
 struct CaptionOverlayView: View {
@@ -277,3 +420,5 @@ struct EndOfGalleryOverlayView: View {
         }
     }
 }
+
+

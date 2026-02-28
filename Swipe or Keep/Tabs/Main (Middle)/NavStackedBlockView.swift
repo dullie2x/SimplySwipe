@@ -1,114 +1,68 @@
 //
 //  NavStackedBlocksView.swift - Updated with FilterType Integration
-//  Media App - Part 1: Header and State
+//  Media App - Main navigation blocks view
 //
 
 import SwiftUI
 import Photos
 import AVKit
 
-// MARK: - Search Result Model
-struct SearchResult {
-    let id: String
-    let title: String
-    let subtitle: String
-    let type: SearchResultType
-    let data: Any
-}
-
-enum SearchResultType {
-    case year
-    case album
-}
-
-struct CircularProgressView: View {
-    var progress: Double
-    var gradient: [Color]
-    
-    var body: some View {
-        ZStack {
-            // Background circle
-            Circle()
-                .stroke(lineWidth: 3)
-                .opacity(0.2)
-                .foregroundColor(Color.white)
-            
-            // Progress circle
-            Circle()
-                .trim(from: 0.0, to: min(CGFloat(progress), 1.0))
-                .stroke(
-                    LinearGradient(
-                        gradient: Gradient(colors: gradient),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
-                )
-                .rotationEffect(Angle(degrees: 270.0))
-                .animation(.linear, value: progress)
-            
-            // Progress text
-            if progress > 0 {
-                Text("\(Int(ceil(progress * 100)))%")
-                    .font(.custom(AppFont.regular, size: 10))
-                    .foregroundColor(.white)
-            }
-        }
-        .frame(width: 40, height: 40)
-    }
-}
-
 struct NavStackedBlocksView: View {
     var blockTitles: [String] = ["Recents", "Screenshots", "Favorites", "Years", "Albums"]
     
     @State private var selectedIndex: IdentifiableInt? = nil
-    
-    // UPDATED: Replace asset arrays with FilterType tracking
     @State private var selectedFilterType: FilterType? = nil
-//    @State private var isFilteredViewPresented = false
     
     // Search state tracking
-    @State private var isYearsSectionExpanded = false
-    @State private var isAlbumsSectionExpanded = false
-    @State private var isSearching = false
-    @State private var searchText = ""
-    @State private var searchResults: [SearchResult] = []
-    @State private var showingSearchResults = false
+    @State fileprivate var isYearsSectionExpanded = false
+    @State fileprivate var isAlbumsSectionExpanded = false
+    @State var isSearching = false
+    @State var searchText = ""
+    @State var searchResults: [SearchResult] = []
+    @State var showingSearchResults = false
     
     // Use shared data manager
     @StateObject private var dataManager = MediaDataManager.shared
-    // Part 2: Main Body and Navigation
+    
+    // MARK: - Main Body
     
     var body: some View {
-        NavigationView {
-            ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(spacing: 20) {
-                    // Search bar (shows when pulling to refresh)
-                    if isSearching {
-                        searchBarView()
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                    }
-                    
-                    Spacer().frame(height: 10)
-                    
-                    // Show search results or normal content
-                    if showingSearchResults {
-                        searchResultsView()
-                    } else {
-                        normalContentView()
-                    }
-                    
-                    Spacer().frame(height: 20)
+        ScrollView(.vertical, showsIndicators: false) {
+            LazyVStack(spacing: 20) {
+                // Search bar (shows when pulling to refresh)
+                if isSearching {
+                    searchBarView()
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
-                .padding(.horizontal, 16)
-            }
-            .background(Color.black)
-            .refreshable {
-                // Trigger search mode
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    isSearching = true
+                
+                // Show search results, quick actions, or normal content
+                if showingSearchResults {
+                    searchResultsView()
+                } else if isSearching && searchText.isEmpty {
+                    quickActionsView()
+                } else if !isSearching {
+                    normalContentView()
                 }
+                
+                Spacer().frame(height: 20)
             }
+            .padding(.top, 0)
+            .padding(.horizontal, 16)
+        }
+        .background(Color.black)
+        .refreshable {
+            // Trigger search mode
+            withAnimation(.easeInOut(duration: 0.3)) {
+                isSearching = true
+            }
+        }
+        // Notify MainTabView to hide/show the tab bar when search mode changes
+        .onChange(of: isSearching) { _, newValue in
+            NotificationCenter.default.post(
+                name: .searchStateChanged,
+                object: nil,
+                userInfo: ["isSearching": newValue]
+            )
         }
         // UPDATED: Single fullScreenCover for categories
         .fullScreenCover(item: $selectedIndex, onDismiss: {
@@ -126,286 +80,6 @@ struct NavStackedBlocksView: View {
                 filterType: filterType
             )
         }
-    }
-    
-    // Part 3: Search Bar and Results Views
-    
-    // MARK: - Search Bar View
-    private func searchBarView() -> some View {
-        VStack(spacing: 16) {
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.white.opacity(0.6))
-                    .font(.system(size: 16))
-                
-                if #available(iOS 17.0, *) {
-                    TextField("Search time periods...", text: $searchText)
-                        .foregroundColor(.white)
-                        .font(.custom(AppFont.regular, size: 16))
-                        .textFieldStyle(PlainTextFieldStyle())
-                        .onChange(of: searchText) { _, newValue in
-                            performSearch(query: newValue)
-                        }
-                } else {
-                    TextField("Search time periods...", text: $searchText)
-                        .foregroundColor(.white)
-                        .font(.custom(AppFont.regular, size: 16))
-                        .textFieldStyle(PlainTextFieldStyle())
-                        .onChange(of: searchText) { newValue in
-                            performSearch(query: newValue)
-                        }
-                }
-                
-                if !searchText.isEmpty {
-                    Button(action: {
-                        searchText = ""
-                        searchResults = []
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            showingSearchResults = false
-                        }
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.white.opacity(0.6))
-                            .font(.system(size: 16))
-                    }
-                }
-                
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        isSearching = false
-                        showingSearchResults = false
-                        searchText = ""
-                        searchResults = []
-                    }
-                }) {
-                    Text("Cancel")
-                        .foregroundColor(.white.opacity(0.8))
-                        .font(.custom(AppFont.regular, size: 16))
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.gray.opacity(0.2))
-            )
-            
-            // Search suggestions (same as before)
-            if searchText.isEmpty {
-                searchSuggestionsView()
-            }
-        }
-    }
-    
-    // MARK: - Search Suggestions View
-    private func searchSuggestionsView() -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Search Suggestions")
-                    .foregroundColor(.white)
-                    .font(.custom(AppFont.regular, size: 20))
-                Spacer()
-                Image(systemName: "lightbulb")
-                    .foregroundColor(.white.opacity(0.6))
-                    .font(.system(size: 16))
-            }
-            .padding(.horizontal, 4)
-            
-            // Examples and Quick Actions (same implementation as before)
-            searchExamplesSection()
-            quickActionsSection()
-        }
-        .padding(.horizontal, 4)
-        .padding(.top, 8)
-    }
-    
-    // Part 4: Search Implementation and Helper Views
-    
-    // MARK: - Search Examples Section
-    private func searchExamplesSection() -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.white.opacity(0.6))
-                    .font(.system(size: 14))
-                Text("Try searching for:")
-                    .foregroundColor(.white.opacity(0.8))
-                    .font(.custom(AppFont.regular, size: 16))
-            }
-            
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(getSearchExamples(), id: \.self) { example in
-                        Button(action: {
-                            searchText = example
-                            performSearch(query: example)
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "quote.bubble")
-                                    .foregroundColor(.white.opacity(0.6))
-                                    .font(.system(size: 12))
-                                Text(example)
-                                    .foregroundColor(.white)
-                                    .font(.custom(AppFont.regular, size: 14))
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(
-                                RoundedRectangle(cornerRadius: 20)
-                                    .fill(Color.white.opacity(0.1))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 20)
-                                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                                    )
-                            )
-                        }
-                        .buttonStyle(SearchSuggestionButtonStyle())
-                    }
-                }
-                .padding(.horizontal, 4)
-            }
-        }
-    }
-    
-    // MARK: - Quick Actions Section
-    private func quickActionsSection() -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "bolt")
-                    .foregroundColor(.white.opacity(0.6))
-                    .font(.system(size: 14))
-                Text("Quick Actions")
-                    .foregroundColor(.white.opacity(0.8))
-                    .font(.custom(AppFont.regular, size: 16))
-            }
-            
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
-                ForEach(getQuickActions(), id: \.title) { action in
-                    Button(action: {
-                        searchText = action.query
-                        performSearch(query: action.query)
-                    }) {
-                        VStack(spacing: 8) {
-                            ZStack {
-                                Circle()
-                                    .fill(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: action.gradientColors),
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .frame(width: 44, height: 44)
-                                    .shadow(color: action.gradientColors.first?.opacity(0.3) ?? Color.clear, radius: 4, x: 0, y: 2)
-                                
-                                Image(systemName: action.icon)
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 18, weight: .semibold))
-                            }
-                            
-                            Text(action.title)
-                                .foregroundColor(.white)
-                                .font(.custom(AppFont.regular, size: 14))
-                                .lineLimit(1)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .padding(.horizontal, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.white.opacity(0.05))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .stroke(
-                                            LinearGradient(
-                                                gradient: Gradient(colors: [
-                                                    Color.white.opacity(0.1),
-                                                    Color.white.opacity(0.05)
-                                                ]),
-                                                startPoint: .topLeading,
-                                                endPoint: .bottomTrailing
-                                            ),
-                                            lineWidth: 1
-                                        )
-                                )
-                        )
-                    }
-                    .buttonStyle(QuickActionButtonStyle())
-                }
-            }
-        }
-    }
-    
-    // Part 5: Content Views and Navigation Logic
-    
-    // MARK: - Search Results View
-    private func searchResultsView() -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("\(searchResults.count) result\(searchResults.count == 1 ? "" : "s")")
-                    .foregroundColor(.white.opacity(0.6))
-                    .font(.custom(AppFont.regular, size: 14))
-                Spacer()
-            }
-            .padding(.horizontal, 4)
-            
-            if searchResults.isEmpty && !searchText.isEmpty {
-                VStack(spacing: 16) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(.white.opacity(0.4))
-                        .font(.system(size: 28))
-                    Text("No results found")
-                        .foregroundColor(.white.opacity(0.6))
-                        .font(.custom(AppFont.regular, size: 16))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 60)
-            } else {
-                VStack(spacing: 8) {
-                    ForEach(searchResults, id: \.id) { result in
-                        Button(action: {
-                            selectSearchResult(result)
-                        }) {
-                            simpleSearchResultRow(result: result)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                }
-            }
-        }
-    }
-    
-    // MARK: - Simple Search Result Row
-    private func simpleSearchResultRow(result: SearchResult) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: result.type == .year ? "calendar" : "rectangle.stack")
-                .foregroundColor(.white.opacity(0.7))
-                .font(.system(size: 18))
-                .frame(width: 24)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(result.title)
-                    .foregroundColor(.white)
-                    .font(.custom(AppFont.regular, size: 16))
-                if !result.subtitle.isEmpty {
-                    Text(result.subtitle)
-                        .foregroundColor(.white.opacity(0.6))
-                        .font(.custom(AppFont.regular, size: 14))
-                }
-            }
-            
-            Spacer()
-            
-            Image(systemName: "chevron.right")
-                .foregroundColor(.white.opacity(0.4))
-                .font(.system(size: 12))
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(0.05))
-        )
     }
     
     // MARK: - Normal Content View
@@ -432,6 +106,7 @@ struct NavStackedBlocksView: View {
                 }
             }
         }
+        .padding(.top, 0)
     }
     
     // MARK: - Main Categories View
@@ -439,7 +114,6 @@ struct NavStackedBlocksView: View {
         VStack(alignment: .leading, spacing: 20) {
             ForEach(0..<3, id: \.self) { index in
                 Button(action: {
-                    print("DEBUG: Category \(index) tapped")
                     selectedIndex = IdentifiableInt(value: index)
                 }) {
                     appleCategoryBlock(index: index)
@@ -484,7 +158,6 @@ struct NavStackedBlocksView: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 2), spacing: 20) {
                 ForEach(dataManager.yearsList, id: \.self) { year in
                     Button(action: {
-                        print("DEBUG: Year \(year) tapped")
                         navigateToYear(year)
                     }) {
                         appleYearBlock(title: year)
@@ -529,7 +202,6 @@ struct NavStackedBlocksView: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 2), spacing: 20) {
                 ForEach(dataManager.folders, id: \.localIdentifier) { folder in
                     Button(action: {
-                        print("DEBUG: Album \(folder.localizedTitle ?? "Unknown") tapped")
                         navigateToAlbum(folder)
                     }) {
                         appleAlbumBlock(title: folder.localizedTitle ?? "Unknown Album")
@@ -652,7 +324,7 @@ struct NavStackedBlocksView: View {
     // Part 7: Search Logic and Helper Functions
     
     // MARK: - Search Result Selection (UPDATED)
-    private func selectSearchResult(_ result: SearchResult) {
+    func selectSearchResult(_ result: SearchResult) {
         // Hide search
         withAnimation(.easeInOut(duration: 0.3)) {
             isSearching = false
@@ -682,11 +354,16 @@ struct NavStackedBlocksView: View {
                     selectedFilterType = .album(folder)
                 }
             }
+
+        case .category(let index):
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                selectedFilterType = .category(index)
+            }
         }
     }
     
     // MARK: - Search Logic
-    private func performSearch(query: String) {
+    func performSearch(query: String) {
         guard !query.isEmpty else {
             searchResults = []
             withAnimation(.easeInOut(duration: 0.3)) {
@@ -697,10 +374,28 @@ struct NavStackedBlocksView: View {
         
         var results: [SearchResult] = []
         let lowercaseQuery = query.lowercased()
-        
+
+        // Search categories (Recents, Screenshots, Favorites)
+        let categoryDefs: [(Int, String, String)] = [
+            (0, "Recents",     "Last 30 days"),
+            (1, "Screenshots", "Screen captures"),
+            (2, "Favorites",   "Liked photos & videos")
+        ]
+        for (index, name, subtitle) in categoryDefs {
+            if name.lowercased().contains(lowercaseQuery) {
+                results.append(SearchResult(
+                    id: "category_\(index)",
+                    title: name,
+                    subtitle: subtitle,
+                    type: .category(index),
+                    data: index
+                ))
+            }
+        }
+
         // Search using month-year data for granular results
         for monthYear in dataManager.monthYearsList {
-            if matchesDateQuery(year: monthYear, query: lowercaseQuery) {
+            if matchesDateQuery(monthYear: monthYear, query: lowercaseQuery) {
                 results.append(SearchResult(
                     id: "monthyear_\(monthYear)",
                     title: monthYear,
@@ -710,17 +405,18 @@ struct NavStackedBlocksView: View {
                 ))
             }
         }
-        
+
         // Also search full years for broader results
         for year in dataManager.yearsList {
             if year.lowercased().contains(lowercaseQuery) {
+                // Only show the full-year result if there are no individual month results for this year
+                let yearSuffix = String(year.suffix(2))
                 let hasMonthResults = results.contains { result in
                     if let resultData = result.data as? String {
-                        return resultData.contains(year.suffix(2))
+                        return resultData.hasSuffix(yearSuffix) && resultData.count <= 6
                     }
                     return false
                 }
-                
                 if !hasMonthResults {
                     results.append(SearchResult(
                         id: "year_\(year)",
@@ -732,7 +428,7 @@ struct NavStackedBlocksView: View {
                 }
             }
         }
-        
+
         // Search albums
         for folder in dataManager.folders {
             let albumTitle = folder.localizedTitle ?? "Unknown Album"
@@ -746,7 +442,7 @@ struct NavStackedBlocksView: View {
                 ))
             }
         }
-        
+
         searchResults = results
         withAnimation(.easeInOut(duration: 0.3)) {
             showingSearchResults = !results.isEmpty
@@ -754,41 +450,45 @@ struct NavStackedBlocksView: View {
     }
     
     // MARK: - Date Query Matching
-    private func matchesDateQuery(year: String, query: String) -> Bool {
-        // Direct match first
-        if year.lowercased().contains(query) {
+    // `monthYear` is a string like "Jan 25" from monthYearsList
+    private func matchesDateQuery(monthYear: String, query: String) -> Bool {
+        // Direct match first (e.g. "jan 25")
+        if monthYear.lowercased().contains(query) {
             return true
         }
-        
+
         let calendar = Calendar.current
         let now = Date()
-        
+
+        // Helper: extract the 2-digit year suffix from a 4-digit year string ("2025" → "25")
+        func twoDigit(_ fullYear: Int) -> String { String(fullYear).suffix(2).description }
+
+        // Helper: extract 4-digit year from the query string if present
+        let yearRegex = try? NSRegularExpression(pattern: "20\\d{2}")
+        func extractQueryYear() -> String? {
+            guard let match = yearRegex?.firstMatch(in: query, range: NSRange(query.startIndex..., in: query)) else { return nil }
+            return String(query[Range(match.range, in: query)!])
+        }
+
         // Handle season searches
         let seasonMonths: [String: [String]] = [
             "summer": ["Jun", "Jul", "Aug"],
             "winter": ["Dec", "Jan", "Feb"],
             "spring": ["Mar", "Apr", "May"],
-            "fall": ["Sep", "Oct", "Nov"],
+            "fall":   ["Sep", "Oct", "Nov"],
             "autumn": ["Sep", "Oct", "Nov"]
         ]
-        
         for (season, months) in seasonMonths {
             if query.contains(season) {
-                let isSeasonMonth = months.contains { monthAbbr in
-                    year.hasPrefix(monthAbbr)
+                let isSeasonMonth = months.contains { monthYear.hasPrefix($0) }
+                if let qYear = extractQueryYear() {
+                    return isSeasonMonth && monthYear.hasSuffix(twoDigit(Int(qYear)!))
                 }
-                
-                let yearRegex = try? NSRegularExpression(pattern: "20\\d{2}")
-                if let match = yearRegex?.firstMatch(in: query, range: NSRange(location: 0, length: query.count)) {
-                    let queryYear = String(query[Range(match.range, in: query)!])
-                    return isSeasonMonth && year.contains(String(queryYear.suffix(2)))
-                } else {
-                    return isSeasonMonth
-                }
+                return isSeasonMonth
             }
         }
-        
-        // Handle month names
+
+        // Handle month name searches (e.g. "january", "jan", "august 2025")
         let monthMappings: [String: String] = [
             "january": "Jan", "jan": "Jan", "february": "Feb", "feb": "Feb",
             "march": "Mar", "mar": "Mar", "april": "Apr", "apr": "Apr",
@@ -797,37 +497,37 @@ struct NavStackedBlocksView: View {
             "october": "Oct", "oct": "Oct", "november": "Nov", "nov": "Nov",
             "december": "Dec", "dec": "Dec"
         ]
-        
         for (monthInput, monthAbbr) in monthMappings {
-            if query.contains(monthInput) && year.hasPrefix(monthAbbr) {
-                let yearRegex = try? NSRegularExpression(pattern: "20\\d{2}")
-                if let match = yearRegex?.firstMatch(in: query, range: NSRange(location: 0, length: query.count)) {
-                    let queryYear = String(query[Range(match.range, in: query)!])
-                    return year.contains(String(queryYear.suffix(2)))
-                } else {
-                    return true
+            if query.contains(monthInput) && monthYear.hasPrefix(monthAbbr) {
+                if let qYear = extractQueryYear() {
+                    return monthYear.hasSuffix(twoDigit(Int(qYear)!))
                 }
+                return true  // month matches, no year constraint
             }
         }
-        
-        // Handle year patterns
-        let yearRegex = try? NSRegularExpression(pattern: "20\\d{2}")
-        if let match = yearRegex?.firstMatch(in: query, range: NSRange(location: 0, length: query.count)) {
-            let queryYear = String(query[Range(match.range, in: query)!])
-            return year.contains(String(queryYear.suffix(2)))
+
+        // Handle bare 4-digit year (e.g. "2025")
+        if let qYear = extractQueryYear() {
+            return monthYear.hasSuffix(twoDigit(Int(qYear)!))
         }
-        
-        // Handle relative dates
+
+        // Handle relative date keywords
+        if query.contains("last month") {
+            let lastMonthDate = calendar.date(byAdding: .month, value: -1, to: now)!
+            let m = calendar.component(.month, from: lastMonthDate)
+            let y = calendar.component(.year, from: lastMonthDate)
+            let abbrs = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+            return monthYear == "\(abbrs[m - 1]) \(twoDigit(y))"
+        }
+
         if query.contains("last year") {
-            let lastYear = calendar.component(.year, from: now) - 1
-            return year.contains(String(lastYear).suffix(2))
+            return monthYear.hasSuffix(twoDigit(calendar.component(.year, from: now) - 1))
         }
-        
+
         if query.contains("this year") {
-            let thisYear = calendar.component(.year, from: now)
-            return year.contains(String(thisYear).suffix(2))
+            return monthYear.hasSuffix(twoDigit(calendar.component(.year, from: now)))
         }
-        
+
         return false
     }
     
@@ -868,279 +568,343 @@ struct NavStackedBlocksView: View {
             .contentShape(Rectangle())
         }
         
-        private func appleLargeSectionBlock(title: String, subtitle: String, gradientColors: [Color], previewImages: [UIImage]) -> some View {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.gray.opacity(0.15))
-                .frame(height: 200)
-                .clipped()
-                .overlay(
-                    ZStack {
-                        if !previewImages.isEmpty {
-                            photoPreviewGrid(images: previewImages)
-                        } else {
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(LinearGradient(
-                                    gradient: Gradient(colors: gradientColors),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ))
-                                .opacity(0.7)
-                        }
-                        
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        Color.black.opacity(0.6),
-                                        Color.black.opacity(0.3),
-                                        Color.clear
-                                    ]),
-                                    startPoint: .bottom,
-                                    endPoint: .top
-                                )
+    private func appleLargeSectionBlock(title: String, subtitle: String, gradientColors: [Color], previewImages: [UIImage]) -> some View {
+        RoundedRectangle(cornerRadius: 20)
+            .fill(Color.gray.opacity(0.15))
+            .frame(height: 200)
+            .clipped()
+            .overlay(
+                ZStack {
+                    if !previewImages.isEmpty {
+                        photoPreviewGrid(images: previewImages)
+                    } else {
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(LinearGradient(
+                                gradient: Gradient(colors: gradientColors),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ))
+                            .opacity(0.7)
+                    }
+                    
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    Color.black.opacity(0.6),
+                                    Color.black.opacity(0.3),
+                                    Color.clear
+                                ]),
+                                startPoint: .bottom,
+                                endPoint: .top
                             )
+                        )
+                    
+                    VStack {
+                        Spacer()
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(title)
+                                    .foregroundColor(.white)
+                                    .font(.custom(AppFont.regular, size: 28))
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.down")
+                                .foregroundColor(.white.opacity(0.8))
+                                .font(.system(size: 28, weight: .medium))
+                                .frame(width: 60, height: 60)
+                        }
+                        .padding(20)
+                    }
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.white.opacity(0.25),
+                                Color.white.opacity(0.08)
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.5
+                    )
+            )
+            .shadow(color: Color.black.opacity(0.6), radius: 15, x: 0, y: 8)
+            .shadow(color: Color.white.opacity(0.1), radius: 2, x: 0, y: -2)
+    }
+
+    private func appleCategoryBlock(index: Int) -> some View {
+        let progress = dataManager.categoryProgress[index] ?? 0
+        let done = progress >= 0.999
+
+        return RoundedRectangle(cornerRadius: 20)
+            .fill(Color.gray.opacity(0.15))
+            .frame(height: 200)
+            .overlay(
+                ZStack {
+                    if let previewImages = dataManager.sectionPreviewImages[index], !previewImages.isEmpty {
+                        photoPreviewGrid(images: previewImages)
+                    } else {
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(LinearGradient(
+                                gradient: Gradient(colors: gradientColors(for: index)),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ))
+                            .opacity(0.7)
+                    }
+
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    Color.black.opacity(0.6),
+                                    Color.black.opacity(0.3),
+                                    Color.clear
+                                ]),
+                                startPoint: .bottom,
+                                endPoint: .top
+                            )
+                        )
+
+                    ZStack {
+                        if done {
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(.ultraThinMaterial)
+                                .overlay(
+                                    LinearGradient(
+                                        colors: [Color.black.opacity(0.15), Color.clear],
+                                        startPoint: .bottom, endPoint: .top
+                                    )
+                                )
+                                .allowsHitTesting(false)
+                        }
                         
                         VStack {
                             Spacer()
-                            HStack {
+                            HStack(alignment: .bottom) {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(title)
+                                    Text(blockTitles[index])
                                         .foregroundColor(.white)
-                                        .font(.custom(AppFont.regular, size: 28))
+                                        .font(.custom(AppFont.regular, size: done ? 20 : 28))
                                 }
                                 Spacer()
-                                Image(systemName: "chevron.down")
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .font(.system(size: 28, weight: .medium))
-                                    .frame(width: 60, height: 60)
+                                if progress > 0 {
+                                    CircularProgressView(
+                                        progress: progress,
+                                        gradient: done ?
+                                            [Color.blue.opacity(0.9), Color.blue.opacity(0.7)] :
+                                            [Color.white.opacity(0.8), Color.white.opacity(0.6)]
+                                    )
+                                }
                             }
                             .padding(20)
                         }
                     }
-                )
-        }
-        
-        private func appleCategoryBlock(index: Int) -> some View {
-            let progress = dataManager.categoryProgress[index] ?? 0
-            let done = progress >= 0.999
-
-            return RoundedRectangle(cornerRadius: 12)
-                .fill(Color.gray.opacity(0.15))
-                .frame(height: 200)
-                .overlay(
-                    ZStack {
-                        if let previewImages = dataManager.sectionPreviewImages[index], !previewImages.isEmpty {
-                            photoPreviewGrid(images: previewImages)
-                        } else {
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(LinearGradient(
-                                    gradient: Gradient(colors: gradientColors(for: index)),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ))
-                                .opacity(0.7)
-                        }
-
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        Color.black.opacity(0.6),
-                                        Color.black.opacity(0.3),
-                                        Color.clear
-                                    ]),
-                                    startPoint: .bottom,
-                                    endPoint: .top
-                                )
-                            )
-
-                        ZStack {
-                            if done {
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(.ultraThinMaterial)
-                                    .overlay(
-                                        LinearGradient(
-                                            colors: [Color.black.opacity(0.15), Color.clear],
-                                            startPoint: .bottom, endPoint: .top
-                                        )
-                                    )
-                                    .allowsHitTesting(false)
-                            }
-                            
-                            VStack {
-                                Spacer()
-                                HStack(alignment: .bottom) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(blockTitles[index])
-                                            .foregroundColor(.white)
-                                            .font(.custom(AppFont.regular, size: done ? 20 : 28))
-                                    }
-                                    Spacer()
-                                    if progress > 0 {
-                                        CircularProgressView(
-                                            progress: progress,
-                                            gradient: done ?
-                                                [Color.blue.opacity(0.9), Color.blue.opacity(0.7)] :
-                                                [Color.white.opacity(0.8), Color.white.opacity(0.6)]
-                                        )
-                                    }
-                                }
-                                .padding(20)
-                            }
-                        }
-                    }
-                )
-        }
-        
-        private func appleYearBlock(title: String) -> some View {
-            let progress = dataManager.yearProgress[title] ?? 0
-            let done = progress >= 0.999
-
-            return RoundedRectangle(cornerRadius: 12)
-                .fill(Color.gray.opacity(0.15))
-                .aspectRatio(1.3, contentMode: .fit)
-                .overlay(
-                    ZStack {
-                        if let previewImages = dataManager.yearPreviewImages[title], !previewImages.isEmpty {
-                            photoPreviewGrid(images: previewImages)
-                        } else {
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(LinearGradient(
-                                    gradient: Gradient(colors: [Color.red.opacity(0.6), Color.pink.opacity(0.6)]),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ))
-                        }
-
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [Color.black.opacity(0.5), Color.clear]),
-                                    startPoint: .bottom,
-                                    endPoint: .center
-                                )
-                            )
-
-                        ZStack {
-                            if done {
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(.ultraThinMaterial)
-                                    .overlay(
-                                        LinearGradient(
-                                            colors: [Color.black.opacity(0.15), Color.clear],
-                                            startPoint: .bottom, endPoint: .top
-                                        )
-                                    )
-                                    .allowsHitTesting(false)
-                            }
-                            
-                            VStack {
-                                Spacer()
-                                HStack(alignment: .bottom) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(title)
-                                            .foregroundColor(.white)
-                                            .font(.custom(AppFont.regular, size: 18))
-                                    }
-                                    Spacer()
-                                    if progress > 0 {
-                                        CircularProgressView(
-                                            progress: progress,
-                                            gradient: done ?
-                                                [Color.blue.opacity(0.9), Color.blue.opacity(0.7)] :
-                                                [Color.white.opacity(0.8), Color.white.opacity(0.6)]
-                                        )
-                                    }
-                                }
-                                .padding(12)
-                            }
-                        }
-                    }
-                )
-        }
-        
-        private func appleAlbumBlock(title: String) -> some View {
-            let progress = dataManager.albumProgress[title] ?? 0
-            let done = progress >= 0.999
-
-            return RoundedRectangle(cornerRadius: 12)
-                .fill(Color.gray.opacity(0.15))
-                .aspectRatio(1.3, contentMode: .fit)
-                .overlay(
-                    ZStack {
-                        if let previewImages = dataManager.albumPreviewImages[title], !previewImages.isEmpty {
-                            photoPreviewGrid(images: previewImages)
-                        } else {
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(LinearGradient(
-                                    gradient: Gradient(colors: [Color.orange.opacity(0.6), Color.yellow.opacity(0.6)]),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ))
-                        }
-
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [Color.black.opacity(0.5), Color.clear]),
-                                    startPoint: .bottom,
-                                    endPoint: .center
-                                )
-                            )
-
-                        ZStack {
-                            if done {
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(.ultraThinMaterial)
-                                    .overlay(
-                                        LinearGradient(
-                                            colors: [Color.black.opacity(0.15), Color.clear],
-                                            startPoint: .bottom, endPoint: .top
-                                        )
-                                    )
-                                    .allowsHitTesting(false)
-                            }
-                            
-                            VStack {
-                                Spacer()
-                                HStack(alignment: .bottom) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(title)
-                                            .foregroundColor(.white)
-                                            .font(.custom(AppFont.regular, size: 16))
-                                            .lineLimit(2)
-                                    }
-                                    Spacer()
-                                    if progress > 0 {
-                                        CircularProgressView(
-                                            progress: progress,
-                                            gradient: done ?
-                                                [Color.blue.opacity(0.9), Color.blue.opacity(0.7)] :
-                                                [Color.white.opacity(0.8), Color.white.opacity(0.6)]
-                                        )
-                                    }
-                                }
-                                .padding(12)
-                            }
-                        }
-                    }
-                )
-        }
-        
-        private func photoPreviewGrid(images: [UIImage]) -> some View {
-            GeometryReader { geometry in
-                let size = geometry.size
-                
-                if let firstImage = images.first {
-                    Image(uiImage: firstImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: size.width, height: size.height)
-                        .clipped()
-                        .cornerRadius(12)
                 }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.white.opacity(0.25),
+                                Color.white.opacity(0.08)
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.5
+                    )
+            )
+            .shadow(color: Color.black.opacity(0.6), radius: 15, x: 0, y: 8)
+            .shadow(color: Color.white.opacity(0.1), radius: 2, x: 0, y: -2)
+    }
+
+    private func appleYearBlock(title: String) -> some View {
+        let progress = dataManager.yearProgress[title] ?? 0
+        let done = progress >= 0.999
+
+        return RoundedRectangle(cornerRadius: 18)
+            .fill(Color.gray.opacity(0.15))
+            .aspectRatio(1.3, contentMode: .fit)
+            .overlay(
+                ZStack {
+                    if let previewImages = dataManager.yearPreviewImages[title], !previewImages.isEmpty {
+                        photoPreviewGrid(images: previewImages)
+                    } else {
+                        RoundedRectangle(cornerRadius: 18)
+                            .fill(LinearGradient(
+                                gradient: Gradient(colors: [Color.red.opacity(0.6), Color.pink.opacity(0.6)]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ))
+                    }
+
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.black.opacity(0.5), Color.clear]),
+                                startPoint: .bottom,
+                                endPoint: .center
+                            )
+                        )
+
+                    ZStack {
+                        if done {
+                            RoundedRectangle(cornerRadius: 18)
+                                .fill(.ultraThinMaterial)
+                                .overlay(
+                                    LinearGradient(
+                                        colors: [Color.black.opacity(0.15), Color.clear],
+                                        startPoint: .bottom, endPoint: .top
+                                    )
+                                )
+                                .allowsHitTesting(false)
+                        }
+                        
+                        VStack {
+                            Spacer()
+                            HStack(alignment: .bottom) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(title)
+                                        .foregroundColor(.white)
+                                        .font(.custom(AppFont.regular, size: 18))
+                                }
+                                Spacer()
+                                if progress > 0 {
+                                    CircularProgressView(
+                                        progress: progress,
+                                        gradient: done ?
+                                            [Color.blue.opacity(0.9), Color.blue.opacity(0.7)] :
+                                            [Color.white.opacity(0.8), Color.white.opacity(0.6)]
+                                    )
+                                }
+                            }
+                            .padding(12)
+                        }
+                    }
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.white.opacity(0.25),
+                                Color.white.opacity(0.08)
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.5
+                    )
+            )
+            .shadow(color: Color.black.opacity(0.5), radius: 12, x: 0, y: 6)
+            .shadow(color: Color.white.opacity(0.1), radius: 2, x: 0, y: -2)
+    }
+
+    private func appleAlbumBlock(title: String) -> some View {
+        let progress = dataManager.albumProgress[title] ?? 0
+        let done = progress >= 0.999
+
+        return RoundedRectangle(cornerRadius: 18)
+            .fill(Color.gray.opacity(0.15))
+            .aspectRatio(1.3, contentMode: .fit)
+            .overlay(
+                ZStack {
+                    if let previewImages = dataManager.albumPreviewImages[title], !previewImages.isEmpty {
+                        photoPreviewGrid(images: previewImages)
+                    } else {
+                        RoundedRectangle(cornerRadius: 18)
+                            .fill(LinearGradient(
+                                gradient: Gradient(colors: [Color.orange.opacity(0.6), Color.yellow.opacity(0.6)]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ))
+                    }
+
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.black.opacity(0.5), Color.clear]),
+                                startPoint: .bottom,
+                                endPoint: .center
+                            )
+                        )
+
+                    ZStack {
+                        if done {
+                            RoundedRectangle(cornerRadius: 18)
+                                .fill(.ultraThinMaterial)
+                                .overlay(
+                                    LinearGradient(
+                                        colors: [Color.black.opacity(0.15), Color.clear],
+                                        startPoint: .bottom, endPoint: .top
+                                    )
+                                )
+                                .allowsHitTesting(false)
+                        }
+                        
+                        VStack {
+                            Spacer()
+                            HStack(alignment: .bottom) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(title)
+                                        .foregroundColor(.white)
+                                        .font(.custom(AppFont.regular, size: 16))
+                                        .lineLimit(2)
+                                }
+                                Spacer()
+                                if progress > 0 {
+                                    CircularProgressView(
+                                        progress: progress,
+                                        gradient: done ?
+                                            [Color.blue.opacity(0.9), Color.blue.opacity(0.7)] :
+                                            [Color.white.opacity(0.8), Color.white.opacity(0.6)]
+                                    )
+                                }
+                            }
+                            .padding(12)
+                        }
+                    }
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.white.opacity(0.25),
+                                Color.white.opacity(0.08)
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.5
+                    )
+            )
+            .shadow(color: Color.black.opacity(0.5), radius: 12, x: 0, y: 6)
+            .shadow(color: Color.white.opacity(0.1), radius: 2, x: 0, y: -2)
+    }
+        
+    private func photoPreviewGrid(images: [UIImage]) -> some View {
+        GeometryReader { geometry in
+            let size = geometry.size
+            
+            if let firstImage = images.first {
+                Image(uiImage: firstImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: size.width, height: size.height)
+                    .clipped()
+                    .cornerRadius(20) // Updated to match the larger blocks
             }
         }
+    }
         
         // MARK: - Helper Functions
         @MainActor
@@ -1162,16 +926,21 @@ struct NavStackedBlocksView: View {
         }
 
         private func getYearsPreviewImages() -> [UIImage] {
-            let firstFewYears = Array(dataManager.yearsList.prefix(4))
+            // Skip the most recent year — it would show the same photos as Recents.
+            // Use photos from the previous year (and older) so the block looks distinct.
+            let yearsForThumbnail = dataManager.yearsList.count > 1
+                ? Array(dataManager.yearsList.dropFirst().prefix(4))
+                : Array(dataManager.yearsList.prefix(4))
+
             var allImages: [UIImage] = []
-            
-            for year in firstFewYears {
+
+            for year in yearsForThumbnail {
                 if let images = dataManager.yearPreviewImages[year] {
                     allImages.append(contentsOf: images)
                     if allImages.count >= 4 { break }
                 }
             }
-            
+
             return Array(allImages.prefix(4))
         }
         
@@ -1190,15 +959,40 @@ struct NavStackedBlocksView: View {
             return Array(allImages.prefix(4))
         }
         
-        private func getSearchExamples() -> [String] {
+        func getSearchExamples() -> [String] {
             return ["May 2019", "Summer 2024", "Winter 2023", "2022", "Last year"]
         }
         
-        private func getQuickActions() -> [QuickAction] {
-            let currentYear = Calendar.current.component(.year, from: Date())
+        func getQuickActions() -> [QuickAction] {
+            let calendar = Calendar.current
+            let now = Date()
+            let currentYear = calendar.component(.year, from: now)
             let lastYear = currentYear - 1
-            
+
+            let lastMonthDate = calendar.date(byAdding: .month, value: -1, to: now)!
+            let lastMonthNum = calendar.component(.month, from: lastMonthDate)
+            let lastMonthYear = calendar.component(.year, from: lastMonthDate)
+            let monthNames = ["January","February","March","April","May","June",
+                              "July","August","September","October","November","December"]
+            let lastMonthName = monthNames[lastMonthNum - 1]
+            let lastMonthQuery = "\(lastMonthName) \(lastMonthYear)"
+            let lastMonthLabel = "\(["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][lastMonthNum - 1]) \(lastMonthYear)"
+
+            let threeMonthsDate = calendar.date(byAdding: .month, value: -3, to: now)!
+            let threeMonthNum = calendar.component(.month, from: threeMonthsDate)
+            let threeMonthYear = calendar.component(.year, from: threeMonthsDate)
+            let threeMonthName = monthNames[threeMonthNum - 1]
+            let threeMonthQuery = "\(threeMonthName) \(threeMonthYear)"
+
             return [
+                QuickAction(
+                    title: "Last Month", subtitle: lastMonthLabel, icon: "calendar",
+                    query: lastMonthQuery, gradientColors: [Color.blue, Color.purple]
+                ),
+                QuickAction(
+                    title: "3 Months Ago", subtitle: threeMonthQuery, icon: "calendar.badge.clock",
+                    query: threeMonthQuery, gradientColors: [Color.purple, Color.pink]
+                ),
                 QuickAction(
                     title: "This Year", subtitle: "\(currentYear)", icon: "calendar.circle",
                     query: "\(currentYear)", gradientColors: [Color.green, Color.blue]
@@ -1227,83 +1021,4 @@ struct NavStackedBlocksView: View {
             default: return AnyView(Text("Unknown View"))
             }
         }
-    }
-
-    // MARK: - Supporting Types and Styles
-    struct QuickAction {
-        let title: String
-        let subtitle: String
-        let icon: String
-        let query: String
-        let gradientColors: [Color]
-    }
-
-    struct SearchSuggestionButtonStyle: ButtonStyle {
-        func makeBody(configuration: Configuration) -> some View {
-            configuration.label
-                .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-                .opacity(configuration.isPressed ? 0.8 : 1.0)
-                .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
-        }
-    }
-
-    struct QuickActionButtonStyle: ButtonStyle {
-        func makeBody(configuration: Configuration) -> some View {
-            configuration.label
-                .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-                .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
-        }
-    }
-
-    struct LoadingView: View {
-        var message: String
-        var onCancel: () -> Void
-        
-        var body: some View {
-            ZStack {
-                Color.black.edgesIgnoringSafeArea(.all)
-                VStack(spacing: 60) {
-                    Spacer()
-                    BouncingLogo(size: 120, amplitude: 15, period: 1.0)
-                    Spacer()
-                    Button(action: onCancel) {
-                        Text("Cancel")
-                            .font(.custom(AppFont.regular, size: 16))
-                            .foregroundColor(.white.opacity(0.6))
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 20)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.white.opacity(0.05))
-                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.1), lineWidth: 1))
-                            )
-                    }
-                    .padding(.bottom, 40)
-                }
-            }
-        }
-    }
-
-    private struct BouncingLogo: View {
-        var size: CGFloat = 100
-        var amplitude: CGFloat = 10
-        var period: Double = 0.9
-
-        var body: some View {
-            TimelineView(.animation) { timeline in
-                let t = timeline.date.timeIntervalSinceReferenceDate
-                let y = sin((2 * .pi / period) * t) * amplitude
-
-                Image("orca8")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: size, height: size)
-                    .offset(y: y)
-            }
-        }
-    }
-
-    struct IdentifiableInt: Identifiable {
-        let id = UUID()
-        let value: Int
     }

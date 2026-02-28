@@ -62,9 +62,6 @@ struct FilteredVertScroll: View {
           .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
               viewModel.handleAppWillEnterBackground()
           }
-          .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-              viewModel.handleAppReturnFromBackground()
-          }
           .onReceive(NotificationCenter.default.publisher(for: .swipeCountChanged)) { _ in
               DispatchQueue.main.async {
                   viewModel.preloadContentForCurrentIndex()

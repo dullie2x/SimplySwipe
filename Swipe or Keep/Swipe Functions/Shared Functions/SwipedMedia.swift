@@ -41,6 +41,9 @@ class SwipedMediaManager: NSObject, ObservableObject {
     // Add a set to track pending updates
     private var pendingProgressUpdates = Set<String>()
     private var progressUpdateTimer: Timer?
+
+    // Debounce timer for UserDefaults saves to avoid per-swipe I/O
+    private var saveDebounceTimer: Timer?
     
     // Media category enum
     enum MediaCategory {
@@ -134,24 +137,14 @@ class SwipedMediaManager: NSObject, ObservableObject {
     
     func recoverItems(with identifiers: Set<String>) {
         trashedItems.subtract(identifiers)
-        
-        // Update the lookup cache
-        for _ in identifiers {
-            // Don't change the swiped status
-        }
-        
+        // Note: swiped status is intentionally preserved when recovering from trash.
         saveTrashedItems()
         updateTrashedMediaAssets()
     }
     
     func deleteItems(with identifiers: Set<String>) {
         trashedItems.subtract(identifiers)
-        
-        // Update the lookup cache
-        for _ in identifiers {
-            // Don't change the swiped status
-        }
-        
+        // Note: swiped status is intentionally preserved after permanent deletion.
         saveTrashedItems()
         updateTrashedMediaAssets()
     }
@@ -232,7 +225,6 @@ class SwipedMediaManager: NSObject, ObservableObject {
             await ProgressManager.shared.invalidateCache(forAlbum: albumTitle)
         }
         
-        print("Reset album: \(albumTitle), removed \(albumAssetIds.count) items")
     }
     
     // Reset specific year's swiped media
@@ -288,7 +280,6 @@ class SwipedMediaManager: NSObject, ObservableObject {
             await ProgressManager.shared.invalidateCache(forYear: year)
         }
         
-        print("Reset year: \(year), removed \(yearAssetIds.count) items")
     }
     
     // Reset specific category's swiped media
@@ -341,7 +332,6 @@ class SwipedMediaManager: NSObject, ObservableObject {
             await ProgressManager.shared.invalidateCache(forCategory: categoryIndex)
         }
         
-        print("Reset category: \(category), removed \(categoryAssetIds.count) items")
     }
     
     // Update the swipe count
@@ -577,6 +567,28 @@ class SwipedMediaManager: NSObject, ObservableObject {
     }
     
     private func saveSwipedMedia() {
+        // Debounce: batch rapid swipes into a single write, max 1 second delay.
+        // Always flush immediately when the app backgrounds (see flushPendingSave).
+        saveDebounceTimer?.invalidate()
+        
+        // Capture the data we need before entering the Sendable closure
+        let mediaToSave = Array(swipedMedia)
+        let key = swipedKey
+        
+        saveDebounceTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { [weak self] _ in
+            UserDefaults.standard.set(mediaToSave, forKey: key)
+            
+            // Clear the timer on the main actor
+            Task { @MainActor [weak self] in
+                self?.saveDebounceTimer = nil
+            }
+        }
+    }
+
+    /// Call this when the app backgrounds to flush any pending save immediately.
+    func flushPendingSave() {
+        saveDebounceTimer?.invalidate()
+        saveDebounceTimer = nil
         UserDefaults.standard.set(Array(swipedMedia), forKey: swipedKey)
     }
     

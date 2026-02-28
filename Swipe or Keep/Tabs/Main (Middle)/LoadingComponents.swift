@@ -230,23 +230,30 @@ struct NetworkErrorOverlay: View {
 // MARK: - Thumbnail Placeholder
 
 struct ThumbnailPlaceholder: View {
+    @State private var rotationAngle: Double = 0
+    
     var body: some View {
         ZStack {
-            // Subtle gradient background
-            LinearGradient(
-                colors: [
-                    Color.gray.opacity(0.08),
-                    Color.gray.opacity(0.12),
-                    Color.gray.opacity(0.08)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            // Very minimal dark background
+            Color.black.opacity(0.95)
             
-            // Optional: Very subtle icon
-            Image(systemName: "photo")
-                .font(.system(size: 40, weight: .ultraLight))
-                .foregroundColor(.white.opacity(0.15))
+            // Simple spinning grey ring
+            Circle()
+                .trim(from: 0, to: 0.7)
+                .stroke(
+                    Color.gray,
+                    style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                )
+                .frame(width: 50, height: 50)
+                .rotationEffect(.degrees(rotationAngle))
+                .onAppear {
+                    withAnimation(
+                        .linear(duration: 1.0)
+                        .repeatForever(autoreverses: false)
+                    ) {
+                        rotationAngle = 360
+                    }
+                }
         }
     }
 }
