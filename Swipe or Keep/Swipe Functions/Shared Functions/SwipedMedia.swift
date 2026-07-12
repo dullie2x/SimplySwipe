@@ -336,10 +336,10 @@ class SwipedMediaManager: NSObject, ObservableObject {
     
     // Update the swipe count
     private func updateSwipeCount() {
+        // In-memory lifetime count only. Do NOT write this to the UserDefaults
+        // "swipeCount" key — that key is owned by SwipeData (daily quota, Keychain)
+        // and writing the lifetime total here could poison its migration path.
         swipeCount = swipedMedia.count
-        
-        // Also update UserDefaults swipeCount to keep it in sync
-        UserDefaults.standard.set(swipeCount, forKey: "swipeCount")
     }
     
     // Calculate progress for a collection (album)

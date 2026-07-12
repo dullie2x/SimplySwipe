@@ -575,6 +575,31 @@ final class CacheManager: ObservableObject {
     // MARK: - Helpers
     private func key(for asset: PHAsset) -> NSString { asset.localIdentifier as NSString }
 
+    /// Shift all index↔assetID bindings by `delta`. Must be called whenever the
+    /// owning view model removes items from the front of its paginated array
+    /// (e.g. trimOldContent), otherwise tier-based pinning and cleanup operate
+    /// on stale indices and pin/evict the wrong neighbors.
+    func shiftIndices(by delta: Int) {
+        guard delta != 0 else { return }
+
+        var shiftedIndexToAssetID: [Int: String] = [:]
+        shiftedIndexToAssetID.reserveCapacity(indexToAssetID.count)
+        for (idx, id) in indexToAssetID {
+            let newIdx = idx + delta
+            // Indices shifted below 0 correspond to trimmed-away items
+            guard newIdx >= 0 else {
+                assetIDToIndex.removeValue(forKey: id)
+                continue
+            }
+            shiftedIndexToAssetID[newIdx] = id
+            assetIDToIndex[id] = newIdx
+        }
+        indexToAssetID = shiftedIndexToAssetID
+
+        // Keep velocity tracking consistent so the next delta isn't nonsense
+        lastIndex = lastIndex.map { $0 + delta }
+    }
+
     func bind(index: Int, to asset: PHAsset) {
         let assetID = asset.localIdentifier
         indexToAssetID[index] = assetID

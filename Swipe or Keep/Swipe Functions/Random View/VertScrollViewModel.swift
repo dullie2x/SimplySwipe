@@ -60,7 +60,6 @@ class VertScrollViewModel: ObservableObject {
     @Published var gestureDirection: GestureDirection = .undecided
     
     // External data
-    @Published var swipeCount = UserDefaults.standard.integer(forKey: "swipeCount")
     let swipeData = SwipeData.shared
     private var swipeDataCancellable: AnyCancellable?
     
@@ -185,20 +184,20 @@ class VertScrollViewModel: ObservableObject {
         let filteredAssets = sampledAssets.filter { !swipedIDs.contains($0.localIdentifier) }
 
         self.mediaItems = filteredAssets
-        self.totalMediaCount = sampledAssets.count
+        self.totalMediaCount = filteredAssets.count
         self.mediaTracker.removeAll()
-        
-        let initialBatch = Array(sampledAssets.prefix(self.initialLoadSize))
+
+        let initialBatch = Array(filteredAssets.prefix(self.initialLoadSize))
         self.paginatedMediaItems = initialBatch
-        
+
         // Initialize tracking
         for item in initialBatch {
             var tracker = MediaItemTracker(identifier: item.localIdentifier)
             tracker.hasBeenSeen = false
             self.mediaTracker[item.localIdentifier] = tracker
         }
-        
-        self.unseenMediaItems = Array(sampledAssets.dropFirst(self.initialLoadSize))
+
+        self.unseenMediaItems = Array(filteredAssets.dropFirst(self.initialLoadSize))
         self.mediaLoadedOffset = initialBatch.count
 
         self.previewIndex = 0
@@ -269,9 +268,10 @@ class VertScrollViewModel: ObservableObject {
             cacheManager.updateVolume(for: currentAsset, muted: currentAssetMuted)
         }
         
-        // ✅ Ensure the very first/just-shown card is counted as "seen" once.
+        // Ensure the just-shown card is tracked as "seen" locally, but don't
+        // persist it — merely viewing a card must not exclude it from future sessions.
         if mediaTracker[currentAsset.localIdentifier]?.hasBeenSeen != true {
-            markCurrentAssetAsSeen()  // NOTE: your mark function does not bump swipeCount
+            markCurrentAssetAsSeen(persist: false)
         }
         
         // Preload neighbors
@@ -579,8 +579,8 @@ class VertScrollViewModel: ObservableObject {
     func handleVerticalSwipeEnd(value: DragGesture.Value, geometry: GeometryProxy, canSwipe: Bool) {
         let threshold: CGFloat = geometry.size.height * 0.10
 
-        // Check for swipe attempts that would require consuming a swipe
-        let willConsumeSwipe = abs(value.translation.height) > threshold
+        // Only forward navigation consumes a swipe; going back is always free
+        let willConsumeSwipe = value.translation.height < -threshold
         
         // If this action will consume a swipe and user can't swipe, show paywall
         if willConsumeSwipe && !canSwipe {
@@ -598,11 +598,9 @@ class VertScrollViewModel: ObservableObject {
                 if previewIndex > maxBackwardIndex {
                     let oldIndex = previewIndex
                     previewIndex -= 1
-                    
-                    // Mark current asset as seen and increment swipe count
-                    markCurrentAssetAsSeen()
-                    swipeData.incrementSwipeCount()
-                    
+
+                    // Going back is free: it doesn't consume quota and must not
+                    // mark the revisited card as swiped/seen again.
                     handleIndexChange(from: oldIndex, to: previewIndex)
                 } else {
                     // Hit the backward limit - double haptic + bounce
@@ -613,11 +611,14 @@ class VertScrollViewModel: ObservableObject {
                 // swipe up → go forward one
                 if previewIndex < paginatedMediaItems.count - 1 {
                     let oldIndex = previewIndex
-                    previewIndex += 1
 
-                    // Mark current asset as seen and increment swipe count
+                    // Mark the card being left as seen BEFORE advancing —
+                    // marking after the index change was tagging the destination
+                    // card as swiped the moment it appeared.
                     markCurrentAssetAsSeen()
                     swipeData.incrementSwipeCount()
+
+                    previewIndex += 1
 
                     // Update backward limit as we move forward
                     maxBackwardIndex = max(0, previewIndex - maxBackwardNavigation)
@@ -644,20 +645,23 @@ class VertScrollViewModel: ObservableObject {
     }
     
     // Add this helper function if it doesn't exist
-    private func markCurrentAssetAsSeen() {
+    /// Marks the current card as seen. Only persists to SwipedMediaManager
+    /// (permanently excluding it from future sessions) when `persist` is true —
+    /// i.e. when the user actively navigates away, not merely when a card appears.
+    private func markCurrentAssetAsSeen(persist: Bool = true) {
         guard let currentAsset = safeCurrentAsset() else { return }
-        
+
         let id = currentAsset.localIdentifier
-        
+
         // Update tracking - mark as seen but not swiped left/right
         var tracker = mediaTracker[id] ?? MediaItemTracker(identifier: id)
         tracker.hasBeenSeen = true
         tracker.lastViewedAt = Date()
         mediaTracker[id] = tracker
-        
-        // Add this line - let SwipedMediaManager filter it out
-        SwipedMediaManager.shared.addSwipedMedia(currentAsset, toTrash: false)
-        
+
+        if persist {
+            SwipedMediaManager.shared.addSwipedMedia(currentAsset, toTrash: false)
+        }
     }
     
     func triggerBackwardLimitFeedback() {
@@ -710,6 +714,9 @@ class VertScrollViewModel: ObservableObject {
         previewIndex     -= trimCount
         maxBackwardIndex  = max(0, maxBackwardIndex - trimCount)
 
+        // Keep CacheManager's index↔asset maps in sync with the shifted array,
+        // otherwise pinning/cleanup target the wrong neighbors until rebind.
+        cacheManager.shiftIndices(by: -trimCount)
     }
 
     func loadMoreContent() {

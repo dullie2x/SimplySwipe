@@ -75,7 +75,6 @@ class FilteredVertScrollViewModel: ObservableObject {
     @Published var gestureDirection: GestureDirection = .undecided
     
     // External data
-    @Published var swipeCount = UserDefaults.standard.integer(forKey: "swipeCount")
     @ObservedObject var swipeData = SwipeData.shared
     
     // Filter options
