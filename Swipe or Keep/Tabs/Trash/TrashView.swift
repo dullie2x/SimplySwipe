@@ -10,14 +10,40 @@ struct TrashView: View {
     @State private var isDeleting = false
     @State private var isRecovering = false
     @State private var showConfirmationDialog = false
+    @State private var showDeleteAllConfirmation = false
     @State private var showFeedback = false
     @State private var feedbackMessage = ""
     @State private var feedbackIsSuccess = true
     @State private var showRatingPrompt = false
+    @State private var trashTotalBytes: Int64 = 0
 
     // Updated colors for blue/black/white theme
     private let deleteColor = Color.red
     private let successColor = Color.blue
+
+    // MARK: - File size helpers
+    private func assetBytes(_ asset: PHAsset) -> Int64 {
+        PHAssetResource.assetResources(for: asset)
+            .reduce(Int64(0)) { $0 + (($1.value(forKey: "fileSize") as? Int64) ?? 0) }
+    }
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useMB, .useGB]
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
+    }
+
+    private func recalculateTotalSize() {
+        trashTotalBytes = swipedMediaManager.trashedMediaAssets
+            .reduce(Int64(0)) { $0 + assetBytes($1) }
+    }
+
+    private var selectedBytes: Int64 {
+        swipedMediaManager.trashedMediaAssets
+            .filter { selectedItems.contains($0.localIdentifier) }
+            .reduce(Int64(0)) { $0 + assetBytes($1) }
+    }
 
     var body: some View {
         NavigationView {
@@ -35,21 +61,37 @@ struct TrashView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .zIndex(100)
                 }
-            }
-            .navigationTitle("Trash")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    if !swipedMediaManager.trashedMediaAssets.isEmpty {
-                        Button(action: toggleSelectionMode) {
-                            Text(isSelectionMode ? "Cancel" : "Select")
-                                .font(.custom(AppFont.regular, size: 15))
+
+                if !swipedMediaManager.trashedMediaAssets.isEmpty && !isSelectionMode {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Button(action: { showDeleteAllConfirmation = true }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "trash.fill")
+                                        .font(.system(size: 14, weight: .semibold))
+                                    Text("Delete All")
+                                        .font(.custom(AppFont.regular, size: 15))
+                                        .fontWeight(.semibold)
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 13)
+                                .background(Capsule().fill(Color.red.opacity(0.9)))
+                                .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 4)
+                            }
+                            .disabled(isDeleting || isRecovering)
+                            .padding(.trailing, 20)
+                            .padding(.bottom, 100)
                         }
-                        .buttonStyle(.plain)
-                        .foregroundColor(.white)
-                        .disabled(isDeleting || isRecovering)
                     }
+                    .transition(.scale.combined(with: .opacity))
+                    .zIndex(50)
                 }
+
             }
+            .navigationBarHidden(true)
             .foregroundColor(.white)
             .tooltip(
                 viewName: "Trash",
@@ -57,15 +99,8 @@ struct TrashView: View {
                 message: "Items you swipe left appear here first",
                 position: .center
             )
-            .sheet(item: $selectedAssetForFullScreen) { asset in
-                FullScreenMediaView(
-                    initialAsset: asset,
-                    allAssets: swipedMediaManager.trashedMediaAssets,
-                    onClose: { selectedAssetForFullScreen = nil }
-                )
-            }
             .confirmationDialog(
-                "Are you sure you want to delete these items?",
+                "Delete \(selectedItems.count) \(selectedItems.count == 1 ? "item" : "items")?",
                 isPresented: $showConfirmationDialog,
                 titleVisibility: .visible
             ) {
@@ -74,7 +109,27 @@ struct TrashView: View {
                 }
                 Button("Cancel", role: .cancel) { }
             } message: {
-                Text("These items will be added to your 'Recently Deleted Album'")
+                let size = selectedBytes
+                Text("This will free up \(formatBytes(size)) and move items to your 'Recently Deleted Album'.")
+            }
+            .confirmationDialog(
+                "Delete all \(swipedMediaManager.trashedMediaAssets.count) items?",
+                isPresented: $showDeleteAllConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete All", role: .destructive) {
+                    deleteAll()
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("This will free up \(formatBytes(trashTotalBytes)) and move all items to your 'Recently Deleted Album'.")
+            }
+            .sheet(item: $selectedAssetForFullScreen) { asset in
+                FullScreenMediaView(
+                    initialAsset: asset,
+                    allAssets: swipedMediaManager.trashedMediaAssets,
+                    onClose: { selectedAssetForFullScreen = nil }
+                )
             }
             .alert("Enjoying Simply Swipe?", isPresented: $showRatingPrompt) {
                 Button("Yes") {
@@ -96,39 +151,83 @@ struct TrashView: View {
             }
             .navigationViewStyle(StackNavigationViewStyle())
             .preferredColorScheme(.dark)
+            .onAppear { recalculateTotalSize() }
+            .onChange(of: swipedMediaManager.trashedMediaAssets.count) { recalculateTotalSize() }
         }
     }
 
     private var emptyStateView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "trash.slash.fill")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 80, height: 80)
-                .foregroundColor(.blue)
-                .scaleEffect(1.0)
-                .animation(
-                    Animation.easeInOut(duration: 1.5)
-                        .repeatForever(autoreverses: true),
-                    value: UUID()
-                )
+        VStack(spacing: 0) {
+            trashHeaderView
+            Spacer()
+            VStack(spacing: 20) {
+                Image(systemName: "trash.slash.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 80, height: 80)
+                    .foregroundColor(.blue)
+                    .animation(
+                        Animation.easeInOut(duration: 1.5)
+                            .repeatForever(autoreverses: true),
+                        value: UUID()
+                    )
 
-            Text("No items in Trash")
-                .font(.custom(AppFont.regular, size: 20))
-                .fontWeight(.semibold)
-                .foregroundColor(.white)
+                Text("No items in Trash")
+                    .font(.custom(AppFont.regular, size: 20))
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
 
-            Text("Items you delete will appear here")
-                .font(.custom(AppFont.regular, size: 12))
-                .foregroundColor(.gray)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
+                Text("Items you delete will appear here")
+                    .font(.custom(AppFont.regular, size: 12))
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private var trashHeaderView: some View {
+        HStack {
+            Text("Trash")
+                .font(.custom(AppFont.regular, size: 28))
+                .fontWeight(.bold)
+                .foregroundColor(.white)
+
+            if trashTotalBytes > 0 {
+                Text(formatBytes(trashTotalBytes))
+                    .font(.custom(AppFont.regular, size: 14))
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.green.opacity(0.85)))
+            }
+
+            Spacer()
+
+            if !swipedMediaManager.trashedMediaAssets.isEmpty {
+                Button(action: toggleSelectionMode) {
+                    Text(isSelectionMode ? "Cancel" : "Select")
+                        .font(.custom(AppFont.regular, size: 15))
+                        .padding(.horizontal, 10)
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .disabled(isDeleting || isRecovering)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
+
     private var contentView: some View {
         VStack(spacing: 0) {
+            trashHeaderView
+
             if isSelectionMode {
                 selectionToolbar
                     .transition(.move(edge: .top).combined(with: .opacity))
@@ -173,6 +272,7 @@ struct TrashView: View {
                     Text(selectedItems.count == swipedMediaManager.trashedMediaAssets.count ? "Deselect All" : "Select All")
                         .font(.custom(AppFont.regular, size: 16))
                         .foregroundColor(.white)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
 
@@ -193,7 +293,7 @@ struct TrashView: View {
                         Text("Recover")
                             .font(.custom(AppFont.regular, size: 14))
                             .foregroundColor(.blue)
-                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -218,7 +318,7 @@ struct TrashView: View {
                         Text("Delete")
                             .font(.custom(AppFont.regular, size: 14))
                             .foregroundColor(.red)
-                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -236,22 +336,22 @@ struct TrashView: View {
     }
 
     private var feedbackToast: some View {
-        HStack {
+        HStack(spacing: 8) {
             Image(systemName: feedbackIsSuccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                .foregroundColor(feedbackIsSuccess ? successColor : deleteColor)
+                .foregroundColor(.white)
 
             Text(feedbackMessage)
                 .font(.subheadline)
-                .fontWeight(.medium)
+                .fontWeight(.semibold)
+                .foregroundColor(.white)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color.black.opacity(0.8))
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background(feedbackIsSuccess ? Color.green.opacity(0.95) : Color.red.opacity(0.95))
         .clipShape(Capsule())
-        .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
-        .padding(.bottom, 40)
+        .shadow(color: .black.opacity(0.4), radius: 12, x: 0, y: 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        .foregroundColor(.white)
+        .padding(.bottom, 100)
     }
 
     private var adaptiveColumns: [GridItem] {
@@ -307,6 +407,9 @@ struct TrashView: View {
 
         let assetsToDelete = swipedMediaManager.trashedMediaAssets.filter { selectedItems.contains($0.localIdentifier) }
 
+        // Capture size before deletion so we can show it in the success message
+        let freedBytes = assetsToDelete.reduce(Int64(0)) { $0 + assetBytes($1) }
+
         PHPhotoLibrary.shared().performChanges({
             PHAssetChangeRequest.deleteAssets(assetsToDelete as NSArray)
         }) { success, error in
@@ -318,7 +421,39 @@ struct TrashView: View {
                         selectedItems.removeAll()
                         isSelectionMode = false
 
-                        showFeedback(message: "Items Added to Recently Deleted Folder!", isSuccess: true)
+                        let sizeString = freedBytes > 0 ? "\(formatBytes(freedBytes)) " : ""
+                        showFeedback(message: "\(sizeString)deleted successfully", isSuccess: true)
+
+                        promptForAppRatingIfNeeded()
+                    } else if error != nil {
+                        showFeedback(message: "Failed to delete items", isSuccess: false)
+                    }
+                    isDeleting = false
+                }
+            }
+        }
+    }
+
+    private func deleteAll() {
+        let assetsToDelete = swipedMediaManager.trashedMediaAssets
+        guard !assetsToDelete.isEmpty else { return }
+
+        isDeleting = true
+        let freedBytes = trashTotalBytes
+
+        PHPhotoLibrary.shared().performChanges({
+            PHAssetChangeRequest.deleteAssets(assetsToDelete as NSArray)
+        }) { success, error in
+            DispatchQueue.main.async {
+                withAnimation {
+                    if success {
+                        let deletedIdentifiers = Set(assetsToDelete.map { $0.localIdentifier })
+                        swipedMediaManager.deleteItems(with: deletedIdentifiers)
+                        selectedItems.removeAll()
+                        isSelectionMode = false
+
+                        let sizeString = freedBytes > 0 ? "\(formatBytes(freedBytes)) " : ""
+                        showFeedback(message: "\(sizeString)deleted successfully", isSuccess: true)
 
                         promptForAppRatingIfNeeded()
                     } else if error != nil {

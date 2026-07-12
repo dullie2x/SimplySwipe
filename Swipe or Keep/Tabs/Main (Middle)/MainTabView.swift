@@ -198,12 +198,13 @@ extension MainTabView {
 struct CustomTabBar: View {
     @Binding var selectedTab: MainTabView.Tab
     @Binding var isTransitioning: Bool
-    
+    @ObservedObject private var swipedMediaManager = SwipedMediaManager.shared
+
     @Namespace private var animation
-    
+
     // PERFORMANCE: Share haptic generator across lifecycle
     private static let sharedHaptic = UIImpactFeedbackGenerator(style: .medium)
-    
+
     // Added: Track pressed state for visual feedback
     @State private var pressedTab: MainTabView.Tab?
 
@@ -253,16 +254,32 @@ struct CustomTabBar: View {
             handleTabSelection(tab)
         }) {
             VStack(spacing: Spacing.tabIconSpacing) {
-                Image(systemName: tab.icon)
-                    .font(.system(
-                        size: Spacing.tabIconSize,
-                        weight: selectedTab == tab ? .semibold : .regular
-                    ))
-                    .foregroundColor(selectedTab == tab ? .white : .white.opacity(0.5))
-                    .scaleEffect(selectedTab == tab ? 1.1 : 1.0)
-                    // Added: Press feedback animation
-                    .scaleEffect(pressedTab == tab ? 0.9 : 1.0)
-                
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: tab.icon)
+                        .font(.system(
+                            size: Spacing.tabIconSize,
+                            weight: selectedTab == tab ? .semibold : .regular
+                        ))
+                        .foregroundColor(selectedTab == tab ? .white : .white.opacity(0.5))
+                        .scaleEffect(selectedTab == tab ? 1.1 : 1.0)
+                        .scaleEffect(pressedTab == tab ? 0.9 : 1.0)
+
+                    if tab == .trash {
+                        let count = swipedMediaManager.trashedMediaAssets.count
+                        if count > 0 {
+                            Text(count > 99 ? "99+" : "\(count)")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 2)
+                                .background(Color.red)
+                                .clipShape(Capsule())
+                                .offset(x: 8, y: -6)
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                    }
+                }
+
                 tabUnderline(for: tab)
             }
         }
