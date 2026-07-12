@@ -93,8 +93,6 @@ final class CacheManager: ObservableObject {
 
     // MARK: - Core Caches
     private let preloadedPlayers = NSCache<NSString, CachedPlayer>()
-    private let highQualityImageCache = NSCache<NSString, UIImage>()
-    private let lowQualityImageCache = NSCache<NSString, UIImage>()
 
     // PHCachingImageManager for system-level thumbnail preheating
     private let cachingImageManager = PHCachingImageManager()
@@ -223,7 +221,6 @@ final class CacheManager: ObservableObject {
     // MARK: - Task Management
     private var preloadTasks: [String: Task<Void, Never>] = [:]
     private var timeoutTasks: [String: DispatchWorkItem] = [:]
-    private var highQualityTasks: [String: Task<Void, Never>] = [:]
 
     // Stores in-flight PHImageManager request IDs keyed by cache key (e.g. "assetID_thumb").
     // Required for real cancellation — Task.cancel() sets a flag but doesn't stop an
@@ -281,27 +278,18 @@ final class CacheManager: ObservableObject {
         fullQualityCache.countLimit = 3
         fullQualityCache.totalCostLimit = 40 * 1024 * 1024 // 40MB hard cap
 
-        // Traditional cache limits (for videos and legacy image path)
         // Video players are expensive (50-100MB each) — keep only 3
         preloadedPlayers.countLimit = 3
-        highQualityImageCache.countLimit = 5     // legacy path; not primary anymore
-        lowQualityImageCache.countLimit = 8      // thumbnails for fallback display
-
-        // Set memory limits — now effective because insertions provide costs
         let memoryLimit = maxTotalMemoryMB * 1024 * 1024  // 250MB
         preloadedPlayers.totalCostLimit = memoryLimit / 3      // ~83MB for videos
-        highQualityImageCache.totalCostLimit = memoryLimit / 8  // ~31MB for legacy HQ
-        lowQualityImageCache.totalCostLimit = memoryLimit / 16  // ~15MB for legacy LQ
 
         // Total hard-cap budget summary:
         //   thumbnails:    8MB
         //   previews:     60MB
         //   full quality: 40MB
         //   players:      83MB
-        //   legacy HQ:    31MB
-        //   legacy LQ:    15MB
         //   ─────────────────
-        //   max possible: ~237MB  ✅ under 250MB
+        //   max possible: ~191MB  ✅ under 250MB
     }
     
     @objc private func handleMemoryWarning() {
@@ -405,8 +393,6 @@ final class CacheManager: ObservableObject {
                 logEviction(assetID: assetID, cacheType: "player", reason: "cleanupExcept")
             }
             preloadedPlayers.removeObject(forKey: assetID as NSString)
-            highQualityImageCache.removeObject(forKey: assetID as NSString)
-            lowQualityImageCache.removeObject(forKey: assetID as NSString)
             cleanedImages += 1
             mediaStates[assetID] = nil
             cancelTasks(for: assetID)
@@ -679,14 +665,6 @@ final class CacheManager: ObservableObject {
         preloadedPlayers.object(forKey: key(for: asset))?.player
     }
 
-    func getHighQualityImage(for asset: PHAsset) -> UIImage? {
-        highQualityImageCache.object(forKey: key(for: asset))
-    }
-
-    func getLowQualityImage(for asset: PHAsset) -> UIImage? {
-        lowQualityImageCache.object(forKey: key(for: asset))
-    }
-
     // MARK: - Index-based Getters
     func getMediaState(for index: Int) -> MediaItemState {
         guard let assetID = indexToAssetID[index] else {
@@ -698,16 +676,6 @@ final class CacheManager: ObservableObject {
     func getPlayer(for index: Int) -> AVQueuePlayer? {
         guard let assetID = indexToAssetID[index] else { return nil }
         return preloadedPlayers.object(forKey: assetID as NSString)?.player
-    }
-
-    func getHighQualityImage(for index: Int) -> UIImage? {
-        guard let assetID = indexToAssetID[index] else { return nil }
-        return highQualityImageCache.object(forKey: assetID as NSString)
-    }
-
-    func getLowQualityImage(for index: Int) -> UIImage? {
-        guard let assetID = indexToAssetID[index] else { return nil }
-        return lowQualityImageCache.object(forKey: assetID as NSString)
     }
 
     // MARK: - Playback Control (TikTok-style with tier-based pinning)
@@ -1154,19 +1122,9 @@ final class CacheManager: ObservableObject {
         if let previewImage = previewCache.object(forKey: "\(assetID)_preview" as NSString) {
             return previewImage
         }
-        
-        // Try legacy high quality cache
-        if let hqImage = highQualityImageCache.object(forKey: assetID as NSString) {
-            return hqImage
-        }
-        
+
         // Fall back to thumbnail
-        if let thumbImage = thumbnailCache.object(forKey: "\(assetID)_thumb" as NSString) {
-            return thumbImage
-        }
-        
-        // Final fallback to legacy low quality
-        return lowQualityImageCache.object(forKey: assetID as NSString)
+        return thumbnailCache.object(forKey: "\(assetID)_thumb" as NSString)
     }
     
     /// Get video poster frame (for showing before player loads)
@@ -1174,40 +1132,6 @@ final class CacheManager: ObservableObject {
         guard asset.mediaType == .video else { return nil }
         let key = "\(asset.localIdentifier)_video_thumb"
         return thumbnailCache.object(forKey: key as NSString)
-    }
-
-    func preloadAsset(_ asset: PHAsset) {
-        let assetID = asset.localIdentifier
-
-        // If focused and already have a player, don't replace
-        if let focused = currentFocusedAssetID, focused == assetID,
-           preloadedPlayers.object(forKey: key(for: asset)) != nil,
-           asset.mediaType == .video {
-            updateMediaState(for: assetID, state: .loaded)
-            return
-        }
-
-        cancelTasks(for: assetID)
-        updateMediaState(for: assetID, state: .loading, incrementAttempts: true)
-
-        if currentFocusedAssetID != assetID {
-            setupTimeout(for: asset)
-        }
-
-        let task = Task<Void, Never> { [weak self] in
-            guard let self else { return }
-            if asset.mediaType == .video {
-                await self.preloadVideo(asset)
-            } else {
-                await self.preloadImages(asset)
-            }
-        }
-        preloadTasks[assetID] = task
-    }
-
-    func preloadAsset(_ asset: PHAsset, at index: Int) {
-        bind(index: index, to: asset)
-        preloadAsset(asset)
     }
 
     // MARK: - Timeout Management
@@ -1247,8 +1171,6 @@ final class CacheManager: ObservableObject {
     private func cancelTasks(for assetID: String) {
         preloadTasks[assetID]?.cancel()
         preloadTasks[assetID] = nil
-        highQualityTasks[assetID]?.cancel()
-        highQualityTasks[assetID] = nil
         clearTimeout(for: assetID)
 
         // Cancel any in-flight PHImageManager requests for this asset.
@@ -1448,106 +1370,6 @@ final class CacheManager: ObservableObject {
         }
     }
 
-    // MARK: - Image Preloading
-    private func preloadImages(_ asset: PHAsset) async {
-        // PERFORMANCE: Check memory before loading images
-        checkMemoryBudget()
-        
-        let ok = await preloadThumbnail(asset)
-        if ok { await preloadHighQualityImage(asset) }
-    }
-
-    private func preloadThumbnail(_ asset: PHAsset) async -> Bool {
-        let assetID = asset.localIdentifier
-
-        if lowQualityImageCache.object(forKey: key(for: asset)) != nil {
-            return true
-        }
-
-        return await withCheckedContinuation { continuation in
-            let options = PHImageRequestOptions()
-            options.deliveryMode = .fastFormat
-            options.resizeMode = .fast
-            options.isNetworkAccessAllowed = true
-
-            PHImageManager.default().requestImage(
-                for: asset,
-                targetSize: CGSize(width: 300, height: 300),
-                contentMode: .aspectFit,
-                options: options
-            ) { [weak self] image, info in
-                Task { @MainActor [weak self] in
-                    guard let self else { continuation.resume(returning: false); return }
-
-                    if let error = info?[PHImageErrorKey] as? Error {
-                        self.updateMediaState(for: assetID, state: .error(error))
-                        continuation.resume(returning: false)
-                    } else if let image = image {
-                        self.lowQualityImageCache.setObject(image, forKey: self.key(for: asset))
-                        continuation.resume(returning: true)
-                    } else {
-                        let fallbackError = NSError(
-                            domain: "CacheManager",
-                            code: 2,
-                            userInfo: [NSLocalizedDescriptionKey: "Failed to load thumbnail"]
-                        )
-                        self.updateMediaState(for: assetID, state: .error(fallbackError))
-                        continuation.resume(returning: false)
-                    }
-                }
-            }
-        }
-    }
-
-    private func preloadHighQualityImage(_ asset: PHAsset) async {
-        let assetID = asset.localIdentifier
-
-        if highQualityImageCache.object(forKey: key(for: asset)) != nil {
-            updateMediaState(for: assetID, state: .loaded)
-            return
-        }
-
-        await withCheckedContinuation { continuation in
-            let screenScale = UIScreen.main.scale
-            let screenBounds = UIScreen.main.bounds
-            // OPTIMIZED: Cap at 2x scale even on 3x devices to save memory
-            let effectiveScale = min(screenScale, 2.0)
-            let targetSize = CGSize(width: screenBounds.width * effectiveScale,
-                                    height: screenBounds.height * effectiveScale)
-
-            let options = PHImageRequestOptions()
-            options.deliveryMode = .highQualityFormat
-            options.resizeMode = .exact  // Important: ensures we get the exact size we request
-            options.isNetworkAccessAllowed = true
-            // PERFORMANCE: Deliver result synchronously if possible to avoid multiple callbacks
-            options.isSynchronous = false  // Keep async for better performance
-
-            PHImageManager.default().requestImage(
-                for: asset,
-                targetSize: targetSize,
-                contentMode: .aspectFit,
-                options: options
-            ) { [weak self] image, info in
-                Task { @MainActor [weak self] in
-                    guard let self else { continuation.resume(); return }
-
-                    if let image = image {
-                        self.highQualityImageCache.setObject(image, forKey: self.key(for: asset))
-                        if let degraded = info?[PHImageResultIsDegradedKey] as? Bool, !degraded {
-                            self.updateMediaState(for: assetID, state: .loaded)
-                            
-                            // PERFORMANCE: Check memory after loading high quality image
-                            self.checkMemoryBudget()
-                        }
-                    } else if let error = info?[PHImageErrorKey] as? Error {
-                        self.updateMediaState(for: assetID, state: .error(error))
-                    }
-                    continuation.resume()
-                }
-            }
-        }
-    }
-
     // MARK: - Cleanup Management
     
     func unpinAllPlayers(except keepAssetIDs: Set<String>) {
@@ -1585,8 +1407,6 @@ final class CacheManager: ObservableObject {
                 cachedPlayer.cleanup()
             }
             preloadedPlayers.removeObject(forKey: assetID as NSString)
-            highQualityImageCache.removeObject(forKey: assetID as NSString)
-            lowQualityImageCache.removeObject(forKey: assetID as NSString)
             mediaStates[assetID] = nil
             cancelTasks(for: assetID)
 
@@ -1613,8 +1433,6 @@ final class CacheManager: ObservableObject {
         }
 
         preloadedPlayers.removeAllObjects()
-        highQualityImageCache.removeAllObjects()
-        lowQualityImageCache.removeAllObjects()
         thumbnailCache.removeAllObjects()
         previewCache.removeAllObjects()
         fullQualityCache.removeAllObjects()
@@ -1630,11 +1448,9 @@ final class CacheManager: ObservableObject {
 
         preloadTasks.values.forEach { $0.cancel() }
         timeoutTasks.values.forEach { $0.cancel() }
-        highQualityTasks.values.forEach { $0.cancel() }
 
         preloadTasks.removeAll()
         timeoutTasks.removeAll()
-        highQualityTasks.removeAll()
 
         // Cancel all in-flight PHImageManager requests
         for (reqKey, reqID) in imageRequestIDs {
@@ -1760,8 +1576,6 @@ final class CacheManager: ObservableObject {
         Cache Manager Status:
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         Players Cache (limit: \(preloadedPlayers.countLimit))
-        HQ Images Cache (limit: \(highQualityImageCache.countLimit))
-        LQ Images Cache (limit: \(lowQualityImageCache.countLimit))
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         Tracked Media States: \(mediaStates.count)
         Pinned Players (strong): \(pinnedPlayersStore.count)
@@ -1770,7 +1584,6 @@ final class CacheManager: ObservableObject {
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         Active Tasks:
         - Preload: \(preloadTasks.count)
-        - High Quality: \(highQualityTasks.count)
         - Timeouts: \(timeoutTasks.count)
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         """

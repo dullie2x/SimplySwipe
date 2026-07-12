@@ -354,7 +354,7 @@ class FilteredVertScrollViewModel: ObservableObject {
     
     func getLowQualityImage(for index: Int) -> UIImage? {
         guard let asset = safeAsset(at: index) else { return nil }
-        return cacheManager.getBestAvailableImage(for: asset) ?? cacheManager.getLowQualityImage(for: asset)
+        return cacheManager.getBestAvailableImage(for: asset)
     }
     
     // MARK: - Video Control Methods

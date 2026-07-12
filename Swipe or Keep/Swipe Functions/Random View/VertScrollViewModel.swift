@@ -332,8 +332,7 @@ class VertScrollViewModel: ObservableObject {
     
     func getLowQualityImage(for index: Int) -> UIImage? {
         guard let asset = safeAsset(at: index) else { return nil }
-        // For backward compatibility, also try progressive cache
-        return cacheManager.getBestAvailableImage(for: asset) ?? cacheManager.getLowQualityImage(for: asset)
+        return cacheManager.getBestAvailableImage(for: asset)
     }
     
     // MARK: - Video Control Methods
