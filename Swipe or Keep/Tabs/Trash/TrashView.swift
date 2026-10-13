@@ -15,34 +15,85 @@ struct TrashView: View {
     @State private var feedbackMessage = ""
     @State private var feedbackIsSuccess = true
     @State private var showRatingPrompt = false
-    @State private var trashTotalBytes: Int64 = 0
+    // File sizes keyed by localIdentifier, filled in off the main thread.
+    @State private var assetSizes: [String: Int64] = [:]
+    @State private var isComputingSizes = false
+    // nil until every trashed asset's size is known, so dialogs never show a partial total.
+    @State private var trashTotalBytes: Int64?
 
     // Updated colors for blue/black/white theme
     private let deleteColor = Color.red
     private let successColor = Color.blue
 
     // MARK: - File size helpers
-    private func assetBytes(_ asset: PHAsset) -> Int64 {
+    private static func assetBytes(_ asset: PHAsset) -> Int64 {
         PHAssetResource.assetResources(for: asset)
             .reduce(Int64(0)) { $0 + (($1.value(forKey: "fileSize") as? Int64) ?? 0) }
     }
 
-    private func formatBytes(_ bytes: Int64) -> String {
+    private static let byteFormatter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useMB, .useGB]
         formatter.countStyle = .file
-        return formatter.string(fromByteCount: bytes)
+        return formatter
+    }()
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        Self.byteFormatter.string(fromByteCount: bytes)
     }
 
+    /// Sum of known sizes, or nil if any asset's size hasn't been computed yet.
+    private func bytes(for assets: [PHAsset]) -> Int64? {
+        var total: Int64 = 0
+        for asset in assets {
+            guard let size = assetSizes[asset.localIdentifier] else { return nil }
+            total += size
+        }
+        return total
+    }
+
+    /// Looks up sizes only for assets we haven't measured, off the main thread.
     private func recalculateTotalSize() {
-        trashTotalBytes = swipedMediaManager.trashedMediaAssets
-            .reduce(Int64(0)) { $0 + assetBytes($1) }
+        let assets = swipedMediaManager.trashedMediaAssets
+        let currentIDs = Set(assets.map { $0.localIdentifier })
+        let missing = assets.filter { assetSizes[$0.localIdentifier] == nil }
+
+        guard missing.isEmpty else {
+            // A pass is already running; it re-checks for newly added items when it finishes.
+            guard !isComputingSizes else { return }
+            isComputingSizes = true
+            DispatchQueue.global(qos: .utility).async {
+                var computed: [String: Int64] = [:]
+                computed.reserveCapacity(missing.count)
+                for asset in missing {
+                    computed[asset.localIdentifier] = Self.assetBytes(asset)
+                }
+                DispatchQueue.main.async {
+                    assetSizes.merge(computed) { _, new in new }
+                    isComputingSizes = false
+                    recalculateTotalSize()
+                }
+            }
+            return
+        }
+
+        // Everything is measured: drop sizes for items no longer in the trash and total up.
+        if assetSizes.count != currentIDs.count {
+            assetSizes = assetSizes.filter { currentIDs.contains($0.key) }
+        }
+        trashTotalBytes = bytes(for: assets)
     }
 
-    private var selectedBytes: Int64 {
-        swipedMediaManager.trashedMediaAssets
-            .filter { selectedItems.contains($0.localIdentifier) }
-            .reduce(Int64(0)) { $0 + assetBytes($1) }
+    private var selectedBytes: Int64? {
+        bytes(for: swipedMediaManager.trashedMediaAssets
+            .filter { selectedItems.contains($0.localIdentifier) })
+    }
+
+    private func freeUpText(_ bytes: Int64?, items: String) -> String {
+        if let bytes {
+            return "This will free up \(formatBytes(bytes)) and move \(items) to your 'Recently Deleted Album'."
+        }
+        return "This will move \(items) to your 'Recently Deleted Album'."
     }
 
     var body: some View {
@@ -109,8 +160,7 @@ struct TrashView: View {
                 }
                 Button("Cancel", role: .cancel) { }
             } message: {
-                let size = selectedBytes
-                Text("This will free up \(formatBytes(size)) and move items to your 'Recently Deleted Album'.")
+                Text(freeUpText(selectedBytes, items: "items"))
             }
             .confirmationDialog(
                 "Delete all \(swipedMediaManager.trashedMediaAssets.count) items?",
@@ -122,7 +172,7 @@ struct TrashView: View {
                 }
                 Button("Cancel", role: .cancel) { }
             } message: {
-                Text("This will free up \(formatBytes(trashTotalBytes)) and move all items to your 'Recently Deleted Album'.")
+                Text(freeUpText(trashTotalBytes, items: "all items"))
             }
             .sheet(item: $selectedAssetForFullScreen) { asset in
                 FullScreenMediaView(
@@ -195,8 +245,8 @@ struct TrashView: View {
                 .fontWeight(.bold)
                 .foregroundColor(.white)
 
-            if trashTotalBytes > 0 {
-                Text(formatBytes(trashTotalBytes))
+            if let totalBytes = trashTotalBytes, totalBytes > 0 {
+                Text(formatBytes(totalBytes))
                     .font(.custom(AppFont.regular, size: 14))
                     .fontWeight(.semibold)
                     .foregroundColor(.white)
@@ -408,7 +458,7 @@ struct TrashView: View {
         let assetsToDelete = swipedMediaManager.trashedMediaAssets.filter { selectedItems.contains($0.localIdentifier) }
 
         // Capture size before deletion so we can show it in the success message
-        let freedBytes = assetsToDelete.reduce(Int64(0)) { $0 + assetBytes($1) }
+        let freedBytes = bytes(for: assetsToDelete) ?? 0
 
         PHPhotoLibrary.shared().performChanges({
             PHAssetChangeRequest.deleteAssets(assetsToDelete as NSArray)
@@ -439,7 +489,7 @@ struct TrashView: View {
         guard !assetsToDelete.isEmpty else { return }
 
         isDeleting = true
-        let freedBytes = trashTotalBytes
+        let freedBytes = trashTotalBytes ?? 0
 
         PHPhotoLibrary.shared().performChanges({
             PHAssetChangeRequest.deleteAssets(assetsToDelete as NSArray)

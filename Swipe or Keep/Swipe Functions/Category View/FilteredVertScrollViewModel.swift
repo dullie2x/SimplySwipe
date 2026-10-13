@@ -34,6 +34,13 @@ extension FilterType: Identifiable, Equatable {
 
 @MainActor
 class FilteredVertScrollViewModel: ObservableObject {
+    // Static cached DateFormatter to avoid a new allocation on every card change
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter
+    }()
+
     // Core media data
     @Published var mediaItems: [PHAsset] = []
     @Published var paginatedMediaItems: [PHAsset] = []
@@ -316,11 +323,8 @@ class FilteredVertScrollViewModel: ObservableObject {
             return
         }
         
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "MMM d, yyyy"
-        
         if let creationDate = asset.creationDate {
-            mediaDate = dateFormatter.string(from: creationDate)
+            mediaDate = Self.dateFormatter.string(from: creationDate)
         } else {
             mediaDate = "No date"
         }

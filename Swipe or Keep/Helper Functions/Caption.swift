@@ -1,6 +1,37 @@
 import SwiftUI
 import Photos
 
+/// Shared by Caption and FilteredCaption. The formatters are built once; creating
+/// DateFormatters inside `body` was repeated on every re-render of the caption.
+@MainActor
+enum CaptionDateFormat {
+    private static let inputFormatters: [DateFormatter] = [
+        "MMM d, yyyy", "MMM dd, yyyy",
+        "MMMM d, yyyy", "MMMM dd, yyyy",
+        "M/d/yyyy", "MM/dd/yyyy", "yyyy-MM-dd"
+    ].map { format in
+        let formatter = DateFormatter()
+        formatter.dateFormat = format
+        return formatter
+    }
+
+    private static let outputFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM d, yyyy"
+        return formatter
+    }()
+
+    /// Re-formats a date string to "MMMM d, yyyy"; returns the input if it matches no known format.
+    static func display(_ date: String) -> String {
+        for formatter in inputFormatters {
+            if let parsed = formatter.date(from: date) {
+                return outputFormatter.string(from: parsed)
+            }
+        }
+        return date
+    }
+}
+
 struct Caption: View {
     let mediaSize: String
     let date: String
@@ -17,20 +48,7 @@ struct Caption: View {
     
     // Format the date into "MMMM d, yyyy"
     private var formattedDate: String {
-        let inputFormatter = DateFormatter()
-        let formats = [
-            "MMM d, yyyy","MMM dd, yyyy",
-            "MMMM d, yyyy","MMMM dd, yyyy",
-            "M/d/yyyy","MM/dd/yyyy","yyyy-MM-dd"
-        ]
-        for f in formats {
-            inputFormatter.dateFormat = f
-            if let d = inputFormatter.date(from: date) {
-                let out = DateFormatter(); out.dateFormat = "MMMM d, yyyy"
-                return out.string(from: d)
-            }
-        }
-        return date
+        CaptionDateFormat.display(date)
     }
     
     var body: some View {

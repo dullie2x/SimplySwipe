@@ -17,20 +17,7 @@ struct FilteredCaption: View {
     
     // Format the date into "MMMM d, yyyy"
     private var formattedDate: String {
-        let inputFormatter = DateFormatter()
-        let formats = [
-            "MMM d, yyyy","MMM dd, yyyy",
-            "MMMM d, yyyy","MMMM dd, yyyy",
-            "M/d/yyyy","MM/dd/yyyy","yyyy-MM-dd"
-        ]
-        for f in formats {
-            inputFormatter.dateFormat = f
-            if let d = inputFormatter.date(from: date) {
-                let out = DateFormatter(); out.dateFormat = "MMMM d, yyyy"
-                return out.string(from: d)
-            }
-        }
-        return date
+        CaptionDateFormat.display(date)
     }
     
     var body: some View {

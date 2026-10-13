@@ -2,6 +2,7 @@
 
 import Foundation
 import Photos
+import UIKit
 
 @MainActor
 class SwipedMediaManager: NSObject, ObservableObject {
@@ -44,6 +45,15 @@ class SwipedMediaManager: NSObject, ObservableObject {
 
     // Debounce timer for UserDefaults saves to avoid per-swipe I/O
     private var saveDebounceTimer: Timer?
+    // True when trashedItems has changes that haven't reached UserDefaults yet
+    private var trashSaveIsPending = false
+
+    // Matches the year-cache keys used by calculateProgress; building a DateFormatter per swipe is costly
+    private static let yearKeyFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM ''yy"
+        return formatter
+    }()
     
     // Media category enum
     enum MediaCategory {
@@ -63,6 +73,17 @@ class SwipedMediaManager: NSObject, ObservableObject {
         
         // Register for photo library change notifications
         PHPhotoLibrary.shared().register(self)
+        
+        // Persist pending swipe/trash changes whenever the app backgrounds, whichever view is active
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.flushPendingSave()
+            }
+        }
     }
     
     deinit {
@@ -82,7 +103,8 @@ class SwipedMediaManager: NSObject, ObservableObject {
         let identifier = asset.localIdentifier
         if toTrash {
             trashedItems.insert(identifier)
-            saveTrashedItems()
+            // Persisted together with swipedMedia by the debounced save below.
+            trashSaveIsPending = true
         }
         swipedMedia.insert(identifier)
         
@@ -120,9 +142,7 @@ class SwipedMediaManager: NSObject, ObservableObject {
         
         // Clear year cache for this asset's year
         if let creationDate = asset.creationDate {
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "MMM ''yy"
-            let year = dateFormatter.string(from: creationDate)
+            let year = Self.yearKeyFormatter.string(from: creationDate)
             yearProgressCache.removeValue(forKey: year)
         }
         
@@ -571,16 +591,11 @@ class SwipedMediaManager: NSObject, ObservableObject {
         // Always flush immediately when the app backgrounds (see flushPendingSave).
         saveDebounceTimer?.invalidate()
         
-        // Capture the data we need before entering the Sendable closure
-        let mediaToSave = Array(swipedMedia)
-        let key = swipedKey
-        
+        // The set is snapshotted when the timer fires, not per swipe — copying it on every
+        // swipe costs O(lifetime swipes) even though only the last copy is ever written.
         saveDebounceTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { [weak self] _ in
-            UserDefaults.standard.set(mediaToSave, forKey: key)
-            
-            // Clear the timer on the main actor
             Task { @MainActor [weak self] in
-                self?.saveDebounceTimer = nil
+                self?.flushPendingSave()
             }
         }
     }
@@ -590,6 +605,9 @@ class SwipedMediaManager: NSObject, ObservableObject {
         saveDebounceTimer?.invalidate()
         saveDebounceTimer = nil
         UserDefaults.standard.set(Array(swipedMedia), forKey: swipedKey)
+        if trashSaveIsPending {
+            saveTrashedItems()
+        }
     }
     
     private func loadSwipedMedia() {
@@ -599,6 +617,7 @@ class SwipedMediaManager: NSObject, ObservableObject {
     }
     
     private func saveTrashedItems() {
+        trashSaveIsPending = false
         UserDefaults.standard.set(Array(trashedItems), forKey: trashKey)
     }
     
