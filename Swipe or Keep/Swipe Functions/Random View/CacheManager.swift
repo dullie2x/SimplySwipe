@@ -748,8 +748,6 @@ final class CacheManager: ObservableObject {
         let unpinned = pinnedPlayersStore.keys.filter { !keepAssetIDs.contains($0) }
         for assetID in unpinned {
             pinnedPlayersStore.removeValue(forKey: assetID)
-            #if DEBUG
-            #endif
         }
         
         let videoPinCount = pinnedPlayersStore.count
@@ -1338,8 +1336,6 @@ final class CacheManager: ObservableObject {
                             self.telemetry.iCloudDownloadsCompleted += 1
                             self.telemetry.iCloudDownloadTimes.append(loadTime)
                             if self.telemetry.iCloudDownloadTimes.count > 200 { self.telemetry.iCloudDownloadTimes.removeFirst() }
-                            #if DEBUG
-                            #endif
                         }
                         
                         // PERFORMANCE: Check memory after loading video
@@ -1428,9 +1424,6 @@ final class CacheManager: ObservableObject {
         cachingImageManager.stopCachingImagesForAllAssets()
 
         for (_, cached) in pinnedPlayersStore { cached.cleanup() }
-        for key in getAllCachedPlayerKeys() {
-            preloadedPlayers.object(forKey: key)?.cleanup()
-        }
 
         preloadedPlayers.removeAllObjects()
         thumbnailCache.removeAllObjects()
@@ -1587,11 +1580,6 @@ final class CacheManager: ObservableObject {
         - Timeouts: \(timeoutTasks.count)
         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         """
-    }
-
-    private func getAllCachedPlayerKeys() -> [NSString] {
-        // NSCache doesn't provide key enumeration
-        return []
     }
 }
 

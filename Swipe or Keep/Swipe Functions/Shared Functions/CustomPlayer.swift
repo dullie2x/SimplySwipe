@@ -396,8 +396,6 @@ struct TikTokVideoPlayerView: View {
 // MARK: - Observer
 
 final class VideoPlayerObserver: ObservableObject {
-    private var timeObserver: Any?
-    private var observingPlayer: AVQueuePlayer?
     private var itemStatusObserver: NSKeyValueObservation?
     private var currentItemObserver: NSKeyValueObservation?
     private var rateObserver: NSKeyValueObservation?
@@ -411,7 +409,6 @@ final class VideoPlayerObserver: ObservableObject {
         onPlaybackStart: @escaping () -> Void = {}
     ) {
         stopObserving()
-        observingPlayer = player
         onPlaybackStartCallback = onPlaybackStart
         hasNotifiedPlaybackStart = false
 
@@ -448,26 +445,15 @@ final class VideoPlayerObserver: ObservableObject {
                 }
             }
         }
-
-        // Keep a benign time observer (ensures periodic main-thread activity)
-        timeObserver = player.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 1, preferredTimescale: 600),
-            queue: .main
-        ) { _ in }
     }
 
     func stopObserving() {
-        if let obs = timeObserver, let p = observingPlayer {
-            p.removeTimeObserver(obs)
-        }
-        timeObserver = nil
         itemStatusObserver?.invalidate()
         itemStatusObserver = nil
         currentItemObserver?.invalidate()
         currentItemObserver = nil
         rateObserver?.invalidate()
         rateObserver = nil
-        observingPlayer = nil
         onPlaybackStartCallback = nil
         hasNotifiedPlaybackStart = false
     }

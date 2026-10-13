@@ -805,16 +805,6 @@ class VertScrollViewModel: ObservableObject {
     }
     
     // MARK: - Preloading and Audio
-//    func initializeAudioSession() {
-//        let audioSession = AVAudioSession.sharedInstance()
-//        do {
-//            try audioSession.setCategory(.playback, mode: .moviePlayback, options: [])
-//            try audioSession.setActive(true)
-//        } catch {
-//            print("Failed to set audio session: \(error)")
-//        }
-//    }
-    
     func preloadInitialContent() {
         Task {
             let currentPaginatedItems = paginatedMediaItems
